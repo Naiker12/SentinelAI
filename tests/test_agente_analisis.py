@@ -52,8 +52,24 @@ def test_analysis_marks_normal_person_as_low_or_medium() -> None:
 
     response = analyze_event(request)
 
-    assert response.result.risk_level in {"BAJO", "MEDIO"}
+    assert response.result.risk_level == "BAJO"
     assert response.decision.notify is False
+
+
+def test_analysis_marks_cell_phone_as_low() -> None:
+    request = AnalysisRequest(
+        evento=PerceptionEvent(
+            objeto="cell phone",
+            confianza=0.92,
+            hora=datetime(2026, 5, 26, 15, 30, tzinfo=timezone.utc),
+            camara="PC-01",
+        )
+    )
+
+    response = analyze_event(request)
+
+    assert response.result.risk_level == "BAJO"
+    assert response.decision.action == "REGISTRAR_EVENTO"
 
 
 def test_analysis_ignores_low_confidence_unknown_object() -> None:

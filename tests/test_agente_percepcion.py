@@ -14,13 +14,18 @@ def test_detection_event_maps_to_supabase_row() -> None:
 
     assert row["objeto"] == "person"
     assert row["camara_id"] == "PC-01"
-    assert row["riesgo"] == "MEDIO"
+    assert row["riesgo"] == "BAJO"
     assert row["box"] == [10, 20, 200, 300]
 
 
 def test_risk_levels() -> None:
     assert risk_for_label("knife") == "alto"
-    assert risk_for_label("person") == "medio"
+    assert risk_for_label("gun") == "alto"
+    assert risk_for_label("scissors") == "alto"
+    assert risk_for_label("person") == "bajo"
+    assert risk_for_label("cell phone") == "bajo"
+    assert risk_for_label("cell_phone") == "bajo"
+    assert risk_for_label("backpack") == "bajo"
     assert risk_for_label("bottle") == "bajo"
 
 

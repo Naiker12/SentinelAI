@@ -9,8 +9,18 @@ from agente_analisis.schemas import (
 )
 
 
+OBJECT_BASE_SCORES = {
+    "gun": 80,
+    "knife": 60,
+    "scissors": 40,
+    "backpack": 18,
+    "person": 10,
+    "cell_phone": 5,
+    "car": 8,
+    "truck": 8,
+    "motorcycle": 10,
+}
 DANGEROUS_OBJECTS = {"knife", "gun", "scissors"}
-RELEVANT_OBJECTS = {"person", "car", "truck", "motorcycle", "backpack", "cell_phone"}
 
 
 def analyze_event(request: AnalysisRequest) -> AnalysisResponse:
@@ -59,10 +69,9 @@ def calculate_risk_score(request: AnalysisRequest) -> tuple[int, list[RiskFactor
     objeto = normalize_label(event.objeto)
     if not objeto:
         add(5, "payload_incompleto", "No se recibio objeto detectable.")
-    elif objeto in DANGEROUS_OBJECTS:
-        add(70 if objeto == "gun" else 55, "objeto_peligroso", f"Objeto peligroso: {objeto}.")
-    elif objeto in RELEVANT_OBJECTS:
-        add(20, "objeto_relevante", f"Objeto relevante: {objeto}.")
+    elif objeto in OBJECT_BASE_SCORES:
+        code = "objeto_peligroso" if objeto in DANGEROUS_OBJECTS else "objeto_base"
+        add(OBJECT_BASE_SCORES[objeto], code, f"Objeto detectado: {objeto}.")
     else:
         add(8, "objeto_observado", f"Objeto observado sin regla critica: {objeto}.")
 

@@ -29,6 +29,28 @@ RISK_BASE = {
     "cell_phone": 0.15,
     "person": 0.20,
 }
+OBJECT_LABELS = {
+    "person": "Persona",
+    "knife": "Cuchillo",
+    "gun": "Pistola",
+    "backpack": "Mochila",
+    "cell_phone": "Celular",
+    "cell phone": "Celular",
+    "scissors": "Tijeras",
+}
+ACTION_LABELS = {
+    "REGISTRAR_EVENTO": "Registrar evento",
+    "MONITOREAR": "Monitorear",
+    "ENVIAR_ALERTA": "Enviar alerta",
+    "ALERTA_CRITICA": "Alerta critica",
+    "IGNORAR_BAJA_CONFIANZA": "Ignorar por baja confianza",
+}
+LEVEL_LABELS = {
+    "BAJO": "Bajo",
+    "MEDIO": "Medio",
+    "ALTO": "Alto",
+    "CRITICO": "Critico",
+}
 
 
 def level_from_score(score: float) -> str:
@@ -95,6 +117,9 @@ def generate_events(count: int = 300) -> pd.DataFrame:
                 "score_riesgo": score,
                 "nivel_riesgo": level,
                 "accion_tomada": ACTIONS[level],
+                "objeto_nombre": OBJECT_LABELS.get(obj, obj),
+                "accion_nombre": ACTION_LABELS[ACTIONS[level]],
+                "nivel_nombre": LEVEL_LABELS[level],
                 "track_id": track_id,
                 "permanencia_s": permanence,
                 "hora": hour,
@@ -112,8 +137,7 @@ def normalize_supabase_events(rows: list[dict]) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     if "timestamp" not in df.columns:
         df["timestamp"] = df.get("detected_at", df.get("created_at"))
-    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-    df["timestamp"] = df["timestamp"].fillna(pd.Timestamp.now())
+    df["timestamp"] = normalize_timestamp_series(df["timestamp"])
 
     if "nivel_riesgo" not in df.columns or df["nivel_riesgo"].isna().all():
         df["nivel_riesgo"] = df.get("riesgo", "BAJO")
@@ -144,6 +168,9 @@ def normalize_supabase_events(rows: list[dict]) -> pd.DataFrame:
     df["confianza"] = pd.to_numeric(df.get("confianza", 0.0), errors="coerce").fillna(0.0)
     df["camara_id"] = df.get("camara_id", "PC-01")
     df["objeto"] = df.get("objeto", "unknown")
+    df["objeto_nombre"] = df["objeto"].map(OBJECT_LABELS).fillna(df["objeto"])
+    df["accion_nombre"] = df["accion_tomada"].map(ACTION_LABELS).fillna(df["accion_tomada"])
+    df["nivel_nombre"] = df["nivel_riesgo"].map(LEVEL_LABELS).fillna(df["nivel_riesgo"])
 
     return df[dashboard_columns()].sort_values("timestamp", ascending=False).reset_index(drop=True)
 
@@ -157,12 +184,22 @@ def dashboard_columns() -> list[str]:
         "confianza",
         "score_riesgo",
         "nivel_riesgo",
+        "nivel_nombre",
         "accion_tomada",
+        "accion_nombre",
+        "objeto_nombre",
         "track_id",
         "permanencia_s",
         "hora",
         "dia_semana",
     ]
+
+
+def normalize_timestamp_series(series: pd.Series) -> pd.Series:
+    timestamps = pd.to_datetime(series, errors="coerce", utc=True)
+    fallback = pd.Timestamp.now(tz="UTC")
+    timestamps = timestamps.fillna(fallback)
+    return timestamps.dt.tz_convert(None)
 
 
 def load_events(limit: int = 500) -> tuple[pd.DataFrame, str]:

@@ -51,6 +51,17 @@ def test_agente_analisis_workflow_returns_persistence_contract() -> None:
     assert "detected_at" in action_code
 
 
+def test_agente_analisis_workflow_uses_low_base_score_for_cell_phone() -> None:
+    workflow = json.loads(Path("n8n/AgenteAnalisis.workflow.json").read_text(encoding="utf-8"))
+    code_nodes = {node["name"]: node["parameters"]["jsCode"] for node in workflow["nodes"] if node["type"].endswith(".code")}
+    risk_code = code_nodes["AgenteRiesgo - Score Hibrido"]
+
+    assert "cell_phone: 5" in risk_code
+    assert "person: 10" in risk_code
+    assert "knife: 60" in risk_code
+    assert "gun: 80" in risk_code
+
+
 def test_n8n_test_payloads_are_valid_json() -> None:
     for path in Path("n8n").glob("test_payload_*.json"):
         payload = json.loads(path.read_text(encoding="utf-8"))

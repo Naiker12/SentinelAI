@@ -110,13 +110,11 @@ class N8nClient:
 
 
 def risk_for_label(label: str) -> str:
+    normalized = label.strip().lower().replace("_", " ")
     high_risk = {"knife", "scissors", "gun"}
-    medium_risk = {"person", "car", "truck", "backpack", "cell phone"}
 
-    if label in high_risk:
+    if normalized in high_risk:
         return "alto"
-    if label in medium_risk:
-        return "medio"
     return "bajo"
 
 

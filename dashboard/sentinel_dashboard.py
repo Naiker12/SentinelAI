@@ -94,7 +94,7 @@ def plot_layout(fig):
 
 
 if page == "Resumen General":
-    st.title("Resumen General")
+    st.title("Panel de Seguridad SentinelAI")
     st.caption(f"{len(df)} eventos en las ultimas {hours_filter}h. Fuente: {mode}.")
 
     total = len(df)
@@ -103,7 +103,7 @@ if page == "Resumen General":
     score_avg = df["score_riesgo"].mean() if total else 0
 
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Total eventos", total)
+    col1.metric("Eventos", total)
     col2.metric("Criticos", critical)
     col3.metric("Altos", high)
     col4.metric("Score promedio", f"{score_avg:.2f}")
@@ -111,7 +111,7 @@ if page == "Resumen General":
 
     col_a, col_b = st.columns([2, 1])
     with col_a:
-        st.subheader("Eventos por hora")
+        st.subheader("Actividad por hora")
         timeline_df = df.copy()
         timeline_df["hora_bin"] = timeline_df["timestamp"].dt.floor("h")
         timeline = timeline_df.groupby(["hora_bin", "nivel_riesgo"]).size().reset_index(name="eventos")
@@ -130,11 +130,16 @@ if page == "Resumen General":
 
     with col_b:
         st.subheader("Distribucion de riesgo")
-        counts = df["nivel_riesgo"].value_counts().reindex(LEVEL_ORDER, fill_value=0)
+        counts = df["nivel_riesgo"].value_counts().reindex(LEVEL_ORDER, fill_value=0).reset_index()
+        counts.columns = ["nivel_riesgo", "eventos"]
+        counts["nivel"] = counts["nivel_riesgo"].map(
+            {"BAJO": "Bajo", "MEDIO": "Medio", "ALTO": "Alto", "CRITICO": "Critico"}
+        )
         fig = px.pie(
-            values=counts.values,
-            names=counts.index,
-            color=counts.index,
+            counts,
+            values="eventos",
+            names="nivel",
+            color="nivel_riesgo",
             color_discrete_map=COLORS,
             hole=0.5,
         )
@@ -143,7 +148,7 @@ if page == "Resumen General":
     col_c, col_d = st.columns(2)
     with col_c:
         st.subheader("Objetos detectados")
-        objects = df["objeto"].value_counts().reset_index()
+        objects = df["objeto_nombre"].value_counts().reset_index()
         objects.columns = ["objeto", "eventos"]
         fig = px.bar(objects, x="eventos", y="objeto", orientation="h", color="eventos")
         st.plotly_chart(plot_layout(fig), use_container_width=True)
@@ -173,13 +178,22 @@ if page == "Resumen General":
                 [
                     "timestamp",
                     "camara_id",
-                    "objeto",
+                    "objeto_nombre",
                     "confianza",
                     "score_riesgo",
-                    "nivel_riesgo",
-                    "accion_tomada",
+                    "nivel_nombre",
+                    "accion_nombre",
                 ]
-            ],
+            ].rename(
+                columns={
+                    "timestamp": "fecha",
+                    "camara_id": "camara",
+                    "objeto_nombre": "objeto",
+                    "score_riesgo": "score",
+                    "nivel_nombre": "nivel",
+                    "accion_nombre": "accion",
+                }
+            ),
             use_container_width=True,
             hide_index=True,
         )
@@ -266,7 +280,15 @@ elif page == "AgenteMemoria":
     memory = df[df["nivel_riesgo"].isin(["ALTO", "CRITICO"])].copy()
     memory["timestamp"] = memory["timestamp"].dt.strftime("%Y-%m-%d %H:%M")
     st.dataframe(
-        memory[["timestamp", "camara_id", "zona", "objeto", "confianza", "score_riesgo", "nivel_riesgo"]],
+        memory[["timestamp", "camara_id", "zona", "objeto_nombre", "confianza", "score_riesgo", "nivel_nombre"]].rename(
+            columns={
+                "timestamp": "fecha",
+                "camara_id": "camara",
+                "objeto_nombre": "objeto",
+                "score_riesgo": "score",
+                "nivel_nombre": "nivel",
+            }
+        ),
         use_container_width=True,
         hide_index=True,
     )
@@ -293,10 +315,10 @@ else:
 <div style="background:#1f2937;border-left:4px solid {color};border-radius:8px;padding:0.8rem 1rem;margin-bottom:0.5rem;">
 <span style="color:#9ca3af">{row['timestamp'].strftime('%H:%M:%S')}</span>
 &nbsp; <strong>{row['camara_id']}</strong>
-&nbsp; {row['objeto']}
-&nbsp; <span style="color:{color};font-weight:700">{level}</span>
+&nbsp; {row['objeto_nombre']}
+&nbsp; <span style="color:{color};font-weight:700">{row['nivel_nombre']}</span>
 &nbsp; score {row['score_riesgo']:.2f}
-&nbsp; {row['accion_tomada']}
+&nbsp; {row['accion_nombre']}
 </div>
 """,
             unsafe_allow_html=True,
@@ -309,14 +331,23 @@ else:
             [
                 "timestamp",
                 "camara_id",
-                "objeto",
+                "objeto_nombre",
                 "confianza",
                 "score_riesgo",
-                "nivel_riesgo",
+                "nivel_nombre",
                 "track_id",
-                "accion_tomada",
+                "accion_nombre",
             ]
-        ],
+        ].rename(
+            columns={
+                "timestamp": "fecha",
+                "camara_id": "camara",
+                "objeto_nombre": "objeto",
+                "score_riesgo": "score",
+                "nivel_nombre": "nivel",
+                "accion_nombre": "accion",
+            }
+        ),
         use_container_width=True,
         hide_index=True,
     )

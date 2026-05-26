@@ -132,8 +132,10 @@ El objeto `persistencia` ya viene preparado para guardar el evento enriquecido e
 
 El score va de `0` a `100`.
 
-- `knife`, `gun`, `scissors`: suman riesgo alto.
-- `person`, `car`, `truck`, `motorcycle`, `backpack`, `cell_phone`: suman riesgo medio.
+- `gun`: base critica.
+- `knife`: base alta.
+- `scissors`: base media-alta.
+- `person`, `cell_phone`, `backpack`, `car`, `truck`, `motorcycle`: base baja.
 - Confianza alta suma puntos.
 - Confianza baja resta puntos.
 - Horario nocturno suma puntos.
@@ -147,7 +149,10 @@ Niveles:
 
 - `0-24`: `BAJO`
 - `25-49`: `MEDIO`
-- `50-100`: `ALTO`
+- `50-79`: `ALTO`
+- `80-100`: `CRITICO`
+
+Importante: una persona o un celular no son sospechosos por si solos. Suben de nivel solo con contexto, tracking, horario, objeto peligroso o historial.
 
 ## Pruebas con curl
 
