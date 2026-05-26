@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agente_percepcion.detector import Detection
+import numpy as np
+
+from agente_percepcion.detector import Detection, draw_detections
 from agente_percepcion.events import DetectionEvent, EventStore, N8nClient, risk_for_label
 
 
@@ -38,3 +40,13 @@ def test_n8n_without_webhook_does_not_send() -> None:
     )
 
     assert N8nClient(webhook_url=None).send(event) is False
+
+
+def test_draw_detections_adds_bounding_box() -> None:
+    frame = np.zeros((120, 160, 3), dtype=np.uint8)
+    detection = Detection(label="person", confidence=0.91, box=(20, 30, 100, 90))
+
+    output = draw_detections(frame.copy(), [detection])
+
+    assert output.sum() > 0
+    assert output[30, 20].sum() > 0
