@@ -50,14 +50,15 @@ def detect_once() -> dict:
     for detection in detections:
         event = DetectionEvent.from_detection(detection, camera_name=settings.camera_name)
         get_store().save(event)
-        try:
-            sent_to_n8n = n8n.send(event)
-            n8n_error = None
-        except Exception as exc:
-            sent_to_n8n = False
-            n8n_error = str(exc)
+        n8n_result = n8n.send(event)
         saved_events.append(
-            {**event.to_payload(), "sent_to_n8n": sent_to_n8n, "n8n_error": n8n_error}
+            {
+                **event.to_payload(),
+                "sent_to_n8n": n8n_result.sent,
+                "n8n_status_code": n8n_result.status_code,
+                "n8n_response": n8n_result.response,
+                "n8n_error": n8n_result.error,
+            }
         )
 
     return {"detections": saved_events}

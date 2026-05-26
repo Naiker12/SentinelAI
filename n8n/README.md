@@ -140,6 +140,28 @@ Caso normal:
 curl.exe -X POST http://localhost:5678/webhook-test/sentinel-analysis -H "Content-Type: application/json" --data-binary "@n8n/test_payload_normal.json"
 ```
 
+## Prueba recomendada desde Python
+
+Antes de abrir la camara, prueba n8n asi:
+
+```powershell
+python tools/test_n8n_webhook.py --payload n8n/test_payload_knife.json
+```
+
+Si el workflow esta activo, usa la URL productiva:
+
+```powershell
+python tools/test_n8n_webhook.py --url http://localhost:5678/webhook/sentinel-analysis --payload n8n/test_payload_knife.json
+```
+
+## Si parece que no pasa nada
+
+- Para `/webhook-test/sentinel-analysis`, n8n debe estar en `Listen for test event`.
+- Para `/webhook/sentinel-analysis`, el workflow debe estar activo.
+- Si Python muestra `connection refused`, n8n no esta corriendo en `localhost:5678`.
+- Si Python muestra `404`, estas usando la URL equivocada o el workflow no esta activo.
+- Si Python detecta objetos pero no envia eventos seguido, revisa `SENTINEL_EVENT_COOLDOWN_SECONDS`.
+
 ## Siguientes fases
 
 - `AgenteTracking`: ByteTrack/DeepSORT en Python.

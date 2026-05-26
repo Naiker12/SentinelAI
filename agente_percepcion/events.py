@@ -76,22 +76,37 @@ class SupabaseEventStore:
         return list(response.data or [])
 
 
+@dataclass(frozen=True)
+class N8nResult:
+    sent: bool
+    status_code: int | None = None
+    response: dict | list | str | None = None
+    error: str | None = None
+
+
 class N8nClient:
     def __init__(self, webhook_url: str | None, timeout_seconds: float = 5) -> None:
         self.webhook_url = webhook_url
         self.timeout_seconds = timeout_seconds
 
-    def send(self, event: DetectionEvent) -> bool:
+    def send(self, event: DetectionEvent) -> N8nResult:
         if not self.webhook_url:
-            return False
+            return N8nResult(sent=False, error="SENTINEL_N8N_WEBHOOK_URL no esta configurado.")
 
-        response = requests.post(
-            self.webhook_url,
-            json=event.to_payload(),
-            timeout=self.timeout_seconds,
-        )
-        response.raise_for_status()
-        return True
+        try:
+            response = requests.post(
+                self.webhook_url,
+                json=event.to_payload(),
+                timeout=self.timeout_seconds,
+            )
+            response.raise_for_status()
+            return N8nResult(
+                sent=True,
+                status_code=response.status_code,
+                response=_parse_response(response),
+            )
+        except requests.RequestException as exc:
+            return N8nResult(sent=False, error=str(exc))
 
 
 def risk_for_label(label: str) -> str:
@@ -103,3 +118,12 @@ def risk_for_label(label: str) -> str:
     if label in medium_risk:
         return "medio"
     return "bajo"
+
+
+def _parse_response(response: requests.Response) -> dict | list | str | None:
+    if not response.text:
+        return None
+    try:
+        return response.json()
+    except ValueError:
+        return response.text

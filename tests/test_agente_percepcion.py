@@ -34,7 +34,10 @@ def test_n8n_without_webhook_does_not_send() -> None:
         box=(10, 20, 200, 300),
     )
 
-    assert N8nClient(webhook_url=None).send(event) is False
+    result = N8nClient(webhook_url=None).send(event)
+
+    assert result.sent is False
+    assert result.error is not None
 
 
 def test_draw_detections_adds_bounding_box() -> None:

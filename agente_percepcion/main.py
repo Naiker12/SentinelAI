@@ -62,10 +62,12 @@ def _save_frame(image_dir: Path, frame) -> str:
 
 
 def _send_to_n8n(n8n: N8nClient, event: DetectionEvent) -> None:
-    try:
-        n8n.send(event)
-    except Exception as exc:
-        print(f"No se pudo enviar evento a n8n: {exc}")
+    result = n8n.send(event)
+    if not result.sent:
+        print(f"n8n no recibio el evento: {result.error}")
+        return
+
+    print(f"n8n respondio ({result.status_code}): {result.response}")
 
 
 if __name__ == "__main__":
