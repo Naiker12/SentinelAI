@@ -65,6 +65,37 @@ def test_agente_analisis_workflow_uses_low_base_score_for_cell_phone() -> None:
     assert "gun: 80" in risk_code
 
 
+def test_agente_analisis_workflow_normalizes_pistol_aliases_to_gun() -> None:
+    workflow = json.loads(Path("n8n/AgenteAnalisis.workflow.json").read_text(encoding="utf-8"))
+    code_nodes = {node["name"]: node["parameters"]["jsCode"] for node in workflow["nodes"] if node["type"].endswith(".code")}
+    normalize_code = code_nodes["Normalizar Evento"]
+
+    assert "pistol: 'gun'" in normalize_code
+    assert "pistola: 'gun'" in normalize_code
+    assert "handgun: 'gun'" in normalize_code
+    assert "firearm: 'gun'" in normalize_code
+
+
+def test_agente_analisis_workflow_accepts_python_precomputed_result() -> None:
+    workflow = json.loads(Path("n8n/AgenteAnalisis.workflow.json").read_text(encoding="utf-8"))
+    code_nodes = {node["name"]: node["parameters"]["jsCode"] for node in workflow["nodes"] if node["type"].endswith(".code")}
+
+    assert "payload.entrada && payload.resultado && payload.decision" in code_nodes["Normalizar Evento"]
+    assert "data.resultado && data.decision" in code_nodes["AgenteRiesgo - Score Hibrido"]
+    assert "data.persistencia && data.resultado && data.decision" in code_nodes["AgenteAccion - Preparar Respuesta"]
+
+
+def test_agente_analisis_workflow_blocks_automation_until_human_review() -> None:
+    workflow = json.loads(Path("n8n/AgenteAnalisis.workflow.json").read_text(encoding="utf-8"))
+    code_nodes = {node["name"]: node["parameters"]["jsCode"] for node in workflow["nodes"] if node["type"].endswith(".code")}
+    action_code = code_nodes["AgenteAccion - Preparar Respuesta"]
+
+    assert "SOLICITAR_VALIDACION_URGENTE" in action_code
+    assert "telegram_supervisor" in action_code
+    assert "estado_revision_humana" in action_code
+    assert "automatizacion_bloqueada" in action_code
+
+
 def test_agente_analisis_workflow_uses_tracking_context() -> None:
     workflow = json.loads(Path("n8n/AgenteAnalisis.workflow.json").read_text(encoding="utf-8"))
     code_nodes = {node["name"]: node["parameters"]["jsCode"] for node in workflow["nodes"] if node["type"].endswith(".code")}
@@ -93,6 +124,7 @@ def test_n8n_ia_code_snippets_are_present() -> None:
     risk = Path("n8n/code/Calcular_Riesgo_Code.js")
     memory = Path("n8n/code/Preparar_Memoria_Sheets.js")
     telegram = Path("n8n/code/Preparar_Alerta_Telegram.js")
+    supervisor = Path("n8n/code/Procesar_Respuesta_Supervisor_Telegram.js")
     responder = Path("n8n/code/Responder_Webhook_Final.js")
     guide = Path("n8n/FLUJO_IA_RIESGO.md")
 
@@ -102,13 +134,22 @@ def test_n8n_ia_code_snippets_are_present() -> None:
     assert risk.exists()
     assert memory.exists()
     assert telegram.exists()
+    assert supervisor.exists()
     assert responder.exists()
     assert guide.exists()
     assert "prompt_ia" in prepare.read_text(encoding="utf-8")
+    assert "payload.entrada && payload.resultado && payload.decision" in prepare.read_text(encoding="utf-8")
+    assert "parsed.resultado && parsed.decision && parsed.persistencia" in risk.read_text(encoding="utf-8")
+    assert 'pistol: "gun"' in prepare.read_text(encoding="utf-8")
+    assert 'pistol: "gun"' in risk.read_text(encoding="utf-8")
     assert "risk_rules_v2_plus_llm_guarded" in parser.read_text(encoding="utf-8")
     assert "risk_rules_v3_history_llm_guarded" in risk.read_text(encoding="utf-8")
     assert "score_riesgo" in memory.read_text(encoding="utf-8")
+    assert "inline_keyboard" in telegram.read_text(encoding="utf-8")
+    assert "sentinel:confirm" in telegram.read_text(encoding="utf-8")
+    assert "human_label" in supervisor.read_text(encoding="utf-8")
     assert "Alerta_Final_Telegram" in guide.read_text(encoding="utf-8")
+    assert "Supervisor Humano" in guide.read_text(encoding="utf-8")
     assert "Responde solo JSON valido" in prompt.read_text(encoding="utf-8")
 
 
@@ -119,6 +160,7 @@ def test_n8n_ia_code_snippets_have_valid_javascript_syntax() -> None:
         Path("n8n/code/Calcular_Riesgo_Code.js"),
         Path("n8n/code/Preparar_Memoria_Sheets.js"),
         Path("n8n/code/Preparar_Alerta_Telegram.js"),
+        Path("n8n/code/Procesar_Respuesta_Supervisor_Telegram.js"),
         Path("n8n/code/Responder_Webhook_Final.js"),
     ]:
         result = subprocess.run(

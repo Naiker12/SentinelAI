@@ -1,4 +1,7 @@
 const parsed = $("Parsear_JSON_LLM").first().json;
+if (parsed.resultado && parsed.decision && parsed.persistencia) {
+  return [{ json: parsed }];
+}
 const historyRows = $input.all().map((item) => item.json ?? {});
 
 const riskRank = { BAJO: 0, MEDIO: 1, ALTO: 2, CRITICO: 3 };
@@ -10,36 +13,65 @@ function clamp(value, min, max, fallback) {
   return Math.max(min, Math.min(max, parsedNumber));
 }
 
+function normalizeObject(value) {
+  const normalized = String(value ?? "").trim().toLowerCase().replace(/[_\s]+/g, "_");
+  const aliases = {
+    pistol: "gun",
+    pistola: "gun",
+    handgun: "gun",
+    firearm: "gun",
+    weapon: "gun",
+    arma: "gun",
+    cellphone: "cell_phone",
+    mobile_phone: "cell_phone",
+    phone: "cell_phone",
+  };
+  return aliases[normalized] ?? normalized;
+}
+
 function riskFromScore(score) {
-  if (score >= 80) return "CRITICO";
-  if (score >= 50) return "ALTO";
-  if (score >= 25) return "MEDIO";
+  if (score >= 90) return "CRITICO";
+  if (score >= 70) return "ALTO";
+  if (score >= 30) return "MEDIO";
   return "BAJO";
 }
 
 function actionFromRisk(risk, confidence) {
+  const reviewActions = ["CONFIRMAR_AMENAZA", "FALSO_POSITIVO", "REQUIERE_MAS_REVISION"];
   if (risk === "CRITICO") {
     return {
-      accion: "ALERTA_CRITICA",
+      accion: "SOLICITAR_VALIDACION_URGENTE",
       prioridad: 10,
       notificar: true,
-      canales: ["telegram", "dashboard_realtime"],
+      canales: ["telegram_supervisor", "dashboard_realtime"],
+      requiere_revision_humana: true,
+      estado_revision_humana: "PENDIENTE",
+      acciones_humanas_permitidas: reviewActions,
+      automatizacion_bloqueada: true,
     };
   }
   if (risk === "ALTO") {
     return {
-      accion: "ENVIAR_ALERTA",
+      accion: "SOLICITAR_VALIDACION_HUMANA",
       prioridad: 8,
       notificar: true,
-      canales: ["dashboard_realtime"],
+      canales: ["telegram_supervisor", "dashboard_realtime"],
+      requiere_revision_humana: true,
+      estado_revision_humana: "PENDIENTE",
+      acciones_humanas_permitidas: reviewActions,
+      automatizacion_bloqueada: true,
     };
   }
   if (risk === "MEDIO") {
     return {
-      accion: "MONITOREAR",
+      accion: "SOLICITAR_REVISION_HUMANA",
       prioridad: 5,
-      notificar: false,
-      canales: [],
+      notificar: true,
+      canales: ["telegram_supervisor"],
+      requiere_revision_humana: true,
+      estado_revision_humana: "PENDIENTE",
+      acciones_humanas_permitidas: reviewActions,
+      automatizacion_bloqueada: true,
     };
   }
   const accion = confidence < 0.5 ? "IGNORAR_BAJA_CONFIANZA" : "REGISTRAR_EVENTO";
@@ -48,6 +80,10 @@ function actionFromRisk(risk, confidence) {
     prioridad: confidence < 0.5 ? 1 : 2,
     notificar: false,
     canales: [],
+    requiere_revision_humana: false,
+    estado_revision_humana: "NO_REQUERIDA",
+    acciones_humanas_permitidas: [],
+    automatizacion_bloqueada: false,
   };
 }
 
@@ -83,7 +119,7 @@ const previousEvents24h = recentRows.length;
 
 const factors = [...(parsed.resultado?.factores ?? [])];
 let score = clamp(parsed.resultado?.score, 0, 100, 0);
-const object = String(parsed.entrada?.objeto ?? "").toLowerCase();
+const object = normalizeObject(parsed.entrada?.objeto);
 const confidence = clamp(parsed.entrada?.confianza, 0, 1, 0);
 const tracking = parsed.tracking ?? {};
 const context = parsed.contexto ?? {};
@@ -147,7 +183,7 @@ const llmRisk = String(parsed.resultado?.riesgo ?? parsed.resultado?.nivel_riesg
 const llmConfidence = clamp(parsed.resultado?.ia_confianza, 0, 1, 0);
 if (llmConfidence >= 0.85 && riskRank[llmRisk] > riskRank[risk]) {
   risk = llmRisk;
-  score = Math.max(score, { MEDIO: 25, ALTO: 50, CRITICO: 80 }[risk] ?? score);
+  score = Math.max(score, { MEDIO: 30, ALTO: 70, CRITICO: 90 }[risk] ?? score);
 }
 
 const decision = actionFromRisk(risk, confidence);
@@ -181,7 +217,10 @@ return [
         canales: decision.canales,
         guardar_en_supabase: true,
         guardar_en_sheets: true,
-        requiere_revision_humana: ["ALTO", "CRITICO"].includes(risk),
+        requiere_revision_humana: decision.requiere_revision_humana,
+        estado_revision_humana: decision.estado_revision_humana,
+        acciones_humanas_permitidas: decision.acciones_humanas_permitidas,
+        automatizacion_bloqueada: decision.automatizacion_bloqueada,
       },
       persistencia: {
         camara_id: parsed.entrada?.camara,
@@ -202,6 +241,8 @@ return [
         },
         resumen_ia: parsed.resultado?.resumen_ia ?? "",
         factores_ia: parsed.resultado?.factores_ia ?? [],
+        requiere_revision_humana: decision.requiere_revision_humana,
+        estado_revision_humana: decision.estado_revision_humana,
       },
       mensaje: `${decision.accion}: ${risk} con score ${scoreRisk}`,
       procesado_en: new Date().toISOString(),

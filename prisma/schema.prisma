@@ -12,7 +12,17 @@ enum RiskLevel {
   BAJO
   MEDIO
   ALTO
+  CRITICO
   DESCONOCIDO
+}
+
+enum HumanReviewStatus {
+  PENDIENTE
+  CONFIRMADA
+  FALSO_POSITIVO
+  REQUIERE_MAS_REVISION
+  NO_REQUERIDA
+  DESCONOCIDA
 }
 
 model Camera {
@@ -44,10 +54,35 @@ model DetectionEvent {
   context           Json?     @map("contexto")
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  humanReviews      HumanReview[]
+
   @@index([cameraId, detectedAt(sort: Desc)], map: "idx_detection_events_camera_detected_at")
   @@index([cameraId, riskLevel, detectedAt(sort: Desc)], map: "idx_detection_events_camera_level_detected_at")
   @@index([detectedAt(sort: Desc)], map: "idx_detection_events_detected_at")
   @@index([risk, detectedAt(sort: Desc)], map: "idx_detection_events_risk_detected_at")
   @@index([object, detectedAt(sort: Desc)], map: "idx_detection_events_object_detected_at")
   @@map("detection_events")
+}
+
+model HumanReview {
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  detectionEventId    String?           @map("detection_event_id") @db.Uuid
+  trackingId          String?           @map("tracking_id")
+  cameraId            String?           @map("camara_id")
+  status              HumanReviewStatus @default(PENDIENTE) @map("estado_revision")
+  humanLabel          String?           @map("human_label")
+  actionFinal         String?           @map("accion_final")
+  supervisorUserId    String?           @map("supervisor_user_id")
+  supervisorUsername  String?           @map("supervisor_username")
+  feedbackForTraining Boolean           @default(false) @map("alimentar_entrenamiento")
+  rawCallback         String?           @map("raw_callback")
+  context             Json?             @map("contexto")
+  decidedAt           DateTime?         @map("decided_at") @db.Timestamptz(6)
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  detectionEvent DetectionEvent? @relation(fields: [detectionEventId], references: [id])
+
+  @@index([trackingId, createdAt(sort: Desc)], map: "idx_human_reviews_tracking_created_at")
+  @@index([status, createdAt(sort: Desc)], map: "idx_human_reviews_status_created_at")
+  @@map("human_reviews")
 }

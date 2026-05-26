@@ -26,7 +26,11 @@ def _as_optional_int(value: str | None) -> int | None:
 def _classes(value: str | None) -> set[str]:
     if not value:
         return {"person"}
-    return {item.strip() for item in value.split(",") if item.strip()}
+    return {_normalize_class_name(item) for item in value.split(",") if item.strip()}
+
+
+def _normalize_class_name(value: str) -> str:
+    return value.strip().lower().replace("_", " ")
 
 
 @dataclass(frozen=True)

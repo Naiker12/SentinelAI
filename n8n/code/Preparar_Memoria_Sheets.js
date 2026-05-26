@@ -21,6 +21,14 @@ return [
       eventos_previos_24h: memory.eventos_previos_24h ?? 0,
       alertas_previas_24h: memory.alertas_previas_24h ?? 0,
       resumen_ia: persistence.resumen_ia ?? data.resultado?.resumen_ia ?? "",
+      requiere_revision_humana: Boolean(
+        persistence.requiere_revision_humana ?? data.decision?.requiere_revision_humana,
+      ),
+      estado_revision_humana:
+        persistence.estado_revision_humana ??
+        data.decision?.estado_revision_humana ??
+        "NO_REQUERIDA",
+      automatizacion_bloqueada: Boolean(data.decision?.automatizacion_bloqueada),
       factores: JSON.stringify(data.resultado?.factores ?? []),
       factores_ia: JSON.stringify(persistence.factores_ia ?? data.resultado?.factores_ia ?? []),
       mensaje: data.mensaje ?? "",

@@ -1,7 +1,8 @@
-# Flujo IA + AgenteRiesgo en n8n
+# Flujo IA + AgenteRiesgo + Supervisor Humano en n8n
 
 Este flujo usa IA como analista contextual, pero la decision final la valida
-`Calcular_Riesgo_Code` con reglas, historial y limites.
+el motor de reglas con historial y limites. Para riesgos `MEDIO`, `ALTO` y
+`CRITICO`, la accion final queda bloqueada hasta que un supervisor humano valide.
 
 ## Orden recomendado
 
@@ -14,9 +15,9 @@ AgentePercepcion_Webhook
     true  -> Consultar_Historial_Sheets -> Calcular_Riesgo_Code
     false -> Solicitar_Validacion_Telegram -> Wait_Timeout -> Consultar_Historial_Sheets
   -> Nivel_Riesgo_Switch
-    CRITICO -> Alerta_Final_Telegram -> Simular_Envio_Accion -> Registrar_Memoria_Sheets -> Respond_to_Webhook
-    ALTO    -> Alerta_Final_Telegram -> Simular_Envio_Accion -> Registrar_Memoria_Sheets -> Respond_to_Webhook
-    MEDIO   -> Registrar_Memoria_Sheets -> Respond_to_Webhook
+    CRITICO -> Telegram_Supervisor_Urgente -> Esperar_Callback -> Procesar_Respuesta_Supervisor -> Accion_Final -> Registrar_Memoria -> Respond_to_Webhook
+    ALTO    -> Telegram_Supervisor -> Esperar_Callback -> Procesar_Respuesta_Supervisor -> Accion_Final -> Registrar_Memoria -> Respond_to_Webhook
+    MEDIO   -> Telegram_Supervisor -> Esperar_Callback_O_Timeout -> Registrar_Memoria -> Respond_to_Webhook
     BAJO    -> Registrar_Memoria_Sheets -> Respond_to_Webhook
 ```
 
@@ -27,6 +28,7 @@ AgentePercepcion_Webhook
 - `Parsear_JSON_LLM`: `n8n/code/Parsear_JSON_LLM.js`
 - `Calcular_Riesgo_Code`: `n8n/code/Calcular_Riesgo_Code.js`
 - Antes de `Alerta_Final_Telegram`: `n8n/code/Preparar_Alerta_Telegram.js`
+- En el webhook de callback de Telegram: `n8n/code/Procesar_Respuesta_Supervisor_Telegram.js`
 - Antes de `Registrar_Memoria_Sheets`: `n8n/code/Preparar_Memoria_Sheets.js`
 - Antes de `Respond_to_Webhook`: `n8n/code/Responder_Webhook_Final.js`
 
@@ -88,6 +90,9 @@ movimiento_erratico
 eventos_previos_24h
 alertas_previas_24h
 resumen_ia
+requiere_revision_humana
+estado_revision_humana
+automatizacion_bloqueada
 factores
 factores_ia
 mensaje
@@ -117,10 +122,53 @@ BAJO
 
 Rutas recomendadas:
 
-- `CRITICO`: Telegram + accion + memoria + respuesta.
-- `ALTO`: Telegram + accion + memoria + respuesta.
-- `MEDIO`: memoria + respuesta.
+- `CRITICO`: Telegram urgente con botones + esperar supervisor + accion final.
+- `ALTO`: Telegram supervisor con botones + esperar supervisor + accion final.
+- `MEDIO`: Telegram supervisor con botones + esperar supervisor o timeout.
 - `BAJO`: memoria + respuesta.
+
+## Telegram Supervisor
+
+`Preparar_Alerta_Telegram.js` genera `reply_markup.inline_keyboard` con:
+
+```json
+{
+  "inline_keyboard": [
+    [
+      {"text": "Confirmar amenaza", "callback_data": "sentinel:confirm:TRACK"},
+      {"text": "Falso positivo", "callback_data": "sentinel:false:TRACK"}
+    ],
+    [
+      {"text": "Mas revision", "callback_data": "sentinel:review:TRACK"}
+    ]
+  ]
+}
+```
+
+El bot debe tener un segundo webhook para callbacks de Telegram. Ese webhook usa
+`Procesar_Respuesta_Supervisor_Telegram.js` y devuelve:
+
+```json
+{
+  "source": "telegram_supervisor",
+  "tracking_id": "gun_0001",
+  "supervisor": {
+    "human_label": "real_threat",
+    "estado_revision_humana": "CONFIRMADA",
+    "accion_final": "ACTIVAR_PROTOCOLO",
+    "alimentar_entrenamiento": true
+  }
+}
+```
+
+Reglas de accion final:
+
+- `CONFIRMADA`: registrar incidente, guardar evidencia y activar protocolo definido.
+- `FALSO_POSITIVO`: cerrar evento y guardar muestra para entrenamiento.
+- `REQUIERE_MAS_REVISION`: solicitar mas frames/contexto y reanalizar.
+
+La IA y Groq pueden recomendar o explicar, pero no deben cambiar
+`accion_final` sin respuesta humana.
 
 ## Respuesta final al webhook
 

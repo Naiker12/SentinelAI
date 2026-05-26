@@ -1,11 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 
 import requests
 
-from agente_percepcion.detector import Detection
+from agente_analisis.schemas import (
+    AnalysisRequest,
+    AnalysisResponse,
+    MemoryContext,
+    PerceptionEvent,
+    SceneContext,
+    TrackingContext,
+)
+from agente_percepcion.detector import Detection, normalize_label
 
 
 @dataclass(frozen=True)
@@ -20,6 +28,7 @@ class DetectionEvent:
     contexto: dict | None = None
     tracking: dict | None = None
     memoria: dict | None = None
+    analisis: dict | None = None
 
     @classmethod
     def from_detection(
@@ -45,8 +54,28 @@ class DetectionEvent:
         )
 
     def to_payload(self) -> dict:
+        if self.analisis:
+            return self.analisis
         payload = asdict(self)
         return {key: value for key, value in payload.items() if value is not None}
+
+    def to_analysis_request(self) -> AnalysisRequest:
+        return AnalysisRequest(
+            evento=PerceptionEvent(
+                objeto=self.objeto,
+                confianza=self.confianza,
+                hora=datetime.fromisoformat(self.hora.replace("Z", "+00:00")),
+                camara=self.camara,
+                box=list(self.box),
+                imagen=self.imagen,
+            ),
+            contexto=SceneContext(**(self.contexto or {})),
+            tracking=TrackingContext(**(self.tracking or {})),
+            memoria=MemoryContext(**(self.memoria or {})),
+        )
+
+    def with_analysis(self, response: AnalysisResponse) -> "DetectionEvent":
+        return replace(self, analisis=_analysis_to_orchestrator_payload(self, response))
 
     def to_supabase_row(self, analysis_response: dict | list | str | None = None) -> dict:
         enriched = _extract_persistence(analysis_response)
@@ -167,7 +196,7 @@ class N8nClient:
 
 
 def risk_for_label(label: str) -> str:
-    normalized = label.strip().lower().replace("_", " ")
+    normalized = normalize_label(label)
     high_risk = {"knife", "scissors", "gun"}
 
     if normalized in high_risk:
@@ -192,6 +221,77 @@ def _extract_persistence(response: dict | list | str | None) -> dict:
     if isinstance(response.get("persistencia"), dict):
         return response["persistencia"]
     return {}
+
+
+def _analysis_to_orchestrator_payload(event: DetectionEvent, response: AnalysisResponse) -> dict:
+    result = response.result
+    decision = response.decision
+    tracking = event.tracking or {}
+    memory = event.memoria or {}
+    context = event.contexto or {}
+    score_riesgo = result.score_riesgo
+    risk = result.nivel_riesgo
+    action = decision.accion_tomada
+
+    entrada = {
+        "objeto": normalize_label(event.objeto).replace(" ", "_"),
+        "confianza": event.confianza,
+        "camara": event.camara,
+        "hora": event.hora,
+        "box": list(event.box),
+        "imagen": event.imagen,
+    }
+
+    return {
+        "status": response.status,
+        "agente": "AgenteAnalisis",
+        "version": "0.2.0",
+        "pipeline": response.pipeline,
+        "entrada": entrada,
+        "contexto": context,
+        "tracking": tracking,
+        "memoria": memory,
+        "resultado": {
+            "riesgo": risk,
+            "nivel_riesgo": risk,
+            "severidad": "CRITICA" if risk == "CRITICO" else risk,
+            "score": result.risk_score,
+            "score_riesgo": score_riesgo,
+            "factores": [factor.model_dump(mode="json") for factor in result.factors],
+            "comportamiento_posible": result.possible_behavior,
+            "algoritmo": result.algorithm,
+        },
+        "decision": {
+            "accion": decision.action,
+            "accion_tomada": action,
+            "prioridad": decision.priority,
+            "notificar": decision.notify,
+            "canales": decision.channels,
+            "guardar_en_supabase": decision.store_in_supabase,
+            "requiere_revision_humana": decision.requires_human_review,
+            "estado_revision_humana": decision.human_review_status,
+            "acciones_humanas_permitidas": decision.allowed_human_actions,
+            "automatizacion_bloqueada": decision.automation_locked,
+        },
+        "persistencia": {
+            "camara_id": event.camara,
+            "objeto": normalize_label(event.objeto).replace(" ", "_"),
+            "confianza": event.confianza,
+            "score_riesgo": score_riesgo,
+            "nivel_riesgo": risk,
+            "accion_tomada": action,
+            "alertas_previas_24h": memory.get("alertas_previas_24h", 0),
+            "detected_at": event.hora,
+            "box": list(event.box),
+            "contexto": context,
+            "tracking": tracking,
+            "memoria": memory,
+            "requiere_revision_humana": decision.requires_human_review,
+            "estado_revision_humana": decision.human_review_status,
+        },
+        "mensaje": f"{action}: {risk} con score {score_riesgo}",
+        "procesado_en": response.processed_at.isoformat(),
+    }
 
 
 def _hour_from_isoformat(value: str) -> int | None:

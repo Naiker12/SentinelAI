@@ -29,7 +29,7 @@ class YoloDetector:
             names = result.names
             for box in result.boxes:
                 class_id = int(box.cls[0])
-                label = str(names[class_id])
+                label = normalize_label(str(names[class_id]))
                 if self._allowed_classes and label not in self._allowed_classes:
                     continue
 
@@ -83,11 +83,28 @@ def _draw_label(frame: MatLike, text: str, x: int, y: int, color: tuple[int, int
 
 
 def _color_for_label(label: str) -> tuple[int, int, int]:
+    normalized = normalize_label(label)
     high_risk = {"knife", "gun", "scissors"}
     medium_risk = {"person", "car", "truck", "backpack", "cell phone"}
 
-    if label in high_risk:
+    if normalized in high_risk:
         return (35, 35, 230)
-    if label in medium_risk:
+    if normalized in medium_risk:
         return (20, 180, 230)
     return (20, 180, 90)
+
+
+def normalize_label(label: str) -> str:
+    normalized = label.strip().lower().replace("_", " ")
+    aliases = {
+        "pistol": "gun",
+        "handgun": "gun",
+        "firearm": "gun",
+        "weapon": "gun",
+        "arma": "gun",
+        "pistola": "gun",
+        "cellphone": "cell phone",
+        "mobile phone": "cell phone",
+        "phone": "cell phone",
+    }
+    return aliases.get(normalized, normalized)

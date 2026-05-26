@@ -12,18 +12,21 @@ SentinelAI es un sistema inteligente de monitoreo preventivo basado en vision ar
 - `AgenteMemoria` persiste eventos e historial en Supabase.
 - n8n orquesta acciones, no hace IA pesada.
 
-## Flujo Objetivo
+## Flujo Actual Recomendado
 
 ```text
-Camara/Webcam
-  -> AgentePercepcion
-  -> AgenteTracking
-  -> AgenteAnalisis
-  -> AgenteRiesgo
-  -> AgenteAccion
-  -> Supabase
+Camara/Webcam/RTSP
+  -> Servicio Python IA
+     -> YOLO
+     -> Tracking persistente
+     -> AgenteAnalisis
+     -> AgenteRiesgo
+     -> JSON limpio
   -> n8n
-  -> Dashboard + Alertas
+     -> Webhook
+     -> historial / memoria externa
+     -> Groq solo para explicacion
+     -> Telegram / Dashboard / Supabase
 ```
 
 ## Estado Actual
@@ -43,10 +46,15 @@ AgenteAnalisis
 
 n8n
   -> Webhook sentinel-analysis
-  -> normalizacion
-  -> score hibrido
-  -> decision para alertas
+  -> acepta resultado precomputado de Python
+  -> mantiene fallback de normalizacion y score simple
+  -> orquesta alertas y persistencia
 ```
+
+El contrato preferido ahora es `Python calcula, n8n orquesta`. Si el payload ya trae
+`entrada`, `resultado`, `decision` y `persistencia`, el workflow no debe recalcular
+el riesgo. Los nodos de riesgo en n8n quedan como fallback para pruebas manuales o
+payloads antiguos.
 
 ## Contrato del AgenteAnalisis
 
@@ -69,6 +77,7 @@ Entrada:
   },
   "tracking": {
     "person_id": "track_14",
+    "track_id": "knife_0001",
     "velocidad": 8.2,
     "permanencia_segundos": 420,
     "movimiento_erratico": true
@@ -79,6 +88,50 @@ Entrada:
   }
 }
 ```
+
+## Contrato Enviado a n8n
+
+`AgentePercepcion` ejecuta el motor Python antes del webhook y envia un objeto listo
+para orquestacion:
+
+```json
+{
+  "entrada": {
+    "objeto": "gun",
+    "confianza": 0.94,
+    "camara": "PC-01",
+    "hora": "2026-05-26T23:40:00Z",
+    "box": [10, 20, 200, 300],
+    "imagen": null
+  },
+  "tracking": {
+    "person_id": "person_0001",
+    "track_id": "gun_0001",
+    "velocidad": 8.2,
+    "permanencia_segundos": 420,
+    "movimiento_erratico": true
+  },
+  "resultado": {
+    "nivel_riesgo": "CRITICO",
+    "score": 120,
+    "score_riesgo": 1.2,
+    "algoritmo": "risk_rules_v1"
+  },
+  "decision": {
+    "accion_tomada": "ALERTA_CRITICA",
+    "notificar": true,
+    "canales": ["telegram", "dashboard_realtime"]
+  },
+  "persistencia": {
+    "camara_id": "PC-01",
+    "objeto": "gun",
+    "nivel_riesgo": "CRITICO"
+  }
+}
+```
+
+Groq puede enriquecer `resultado.resumen_ia`, pero no debe reemplazar el score ni
+la decision final del motor de reglas.
 
 Salida:
 

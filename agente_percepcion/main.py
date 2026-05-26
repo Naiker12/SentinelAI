@@ -5,6 +5,7 @@ from pathlib import Path
 
 import cv2
 
+from agente_analisis.risk_engine import analyze_event
 from agente_percepcion.camera import Camera
 from agente_percepcion.config import get_settings
 from agente_percepcion.detector import YoloDetector, draw_detections
@@ -85,9 +86,11 @@ def run() -> None:
                     },
                     memoria=memory_snapshot,
                 )
+                analysis = analyze_event(event.to_analysis_request())
+                event = event.with_analysis(analysis)
                 n8n_result = _send_to_n8n(n8n, event)
-                store.save(event, n8n_result.response)
-                memory.remember(now, event.riesgo)
+                store.save(event, n8n_result.response or event.analisis)
+                memory.remember(now, analysis.result.risk_level)
                 print(event.to_payload())
 
             cv2.imshow("SentinelAI - AgentePercepcion", draw_detections(frame, detections))

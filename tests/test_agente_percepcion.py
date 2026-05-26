@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from agente_percepcion.detector import Detection, draw_detections
+from agente_percepcion.config import _classes
+from agente_percepcion.detector import Detection, draw_detections, normalize_label
 from agente_percepcion.events import DetectionEvent, N8nClient, risk_for_label
 from agente_percepcion.tracking import ObjectTracker, should_emit_event
+from agente_analisis.risk_engine import analyze_event
 
 
 def test_detection_event_maps_to_supabase_row() -> None:
@@ -49,12 +51,31 @@ def test_detection_event_maps_n8n_persistence_to_supabase_row() -> None:
 def test_risk_levels() -> None:
     assert risk_for_label("knife") == "alto"
     assert risk_for_label("gun") == "alto"
+    assert risk_for_label("pistol") == "alto"
+    assert risk_for_label("pistola") == "alto"
     assert risk_for_label("scissors") == "alto"
     assert risk_for_label("person") == "bajo"
     assert risk_for_label("cell phone") == "bajo"
     assert risk_for_label("cell_phone") == "bajo"
     assert risk_for_label("backpack") == "bajo"
     assert risk_for_label("bottle") == "bajo"
+
+
+def test_detection_labels_normalize_weapon_aliases() -> None:
+    assert normalize_label("pistol") == "gun"
+    assert normalize_label("handgun") == "gun"
+    assert normalize_label("firearm") == "gun"
+    assert normalize_label("pistola") == "gun"
+    assert normalize_label("cell_phone") == "cell phone"
+
+
+def test_allowed_classes_normalize_to_detector_labels() -> None:
+    assert _classes("person,knife,gun,cell_phone") == {
+        "person",
+        "knife",
+        "gun",
+        "cell phone",
+    }
 
 
 def test_n8n_without_webhook_does_not_send() -> None:
@@ -112,6 +133,34 @@ def test_detection_event_includes_analysis_context() -> None:
     assert payload["contexto"]["zona"] == "entrada"
     assert payload["tracking"]["person_id"] == "person_0001"
     assert payload["memoria"]["alertas_previas_24h"] == 1
+
+
+def test_detection_event_can_emit_precomputed_analysis_payload() -> None:
+    detection = Detection(label="pistol", confidence=0.94, box=(10, 20, 200, 300))
+    event = DetectionEvent.from_detection(
+        detection,
+        camera_name="PC-01",
+        contexto={"zona": "entrada", "iluminacion": "baja", "cantidad_personas": 1},
+        tracking={
+            "person_id": "person_0001",
+            "track_id": "gun_0001",
+            "velocidad": 8.2,
+            "permanencia_segundos": 420,
+            "movimiento_erratico": True,
+        },
+        memoria={"eventos_previos_24h": 12, "alertas_previas_24h": 2},
+    )
+
+    analyzed = event.with_analysis(analyze_event(event.to_analysis_request()))
+    payload = analyzed.to_payload()
+
+    assert payload["entrada"]["objeto"] == "gun"
+    assert payload["tracking"]["track_id"] == "gun_0001"
+    assert payload["resultado"]["nivel_riesgo"] == "CRITICO"
+    assert payload["decision"]["accion_tomada"] == "SOLICITAR_VALIDACION_URGENTE"
+    assert payload["decision"]["requiere_revision_humana"] is True
+    assert payload["decision"]["automatizacion_bloqueada"] is True
+    assert payload["persistencia"]["tracking"]["person_id"] == "person_0001"
 
 
 def test_tracker_separates_people_with_different_boxes() -> None:

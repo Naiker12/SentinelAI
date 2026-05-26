@@ -20,6 +20,7 @@ class PerceptionEvent(BaseModel):
 
 class TrackingContext(BaseModel):
     person_id: str | None = None
+    track_id: str | None = None
     velocidad: float = 0.0
     permanencia_segundos: int = 0
     movimiento_erratico: bool = False
@@ -69,6 +70,9 @@ class ActionDecision(BaseModel):
     channels: list[str]
     store_in_supabase: bool = True
     requires_human_review: bool
+    human_review_status: str = "NO_REQUERIDA"
+    allowed_human_actions: list[str] = Field(default_factory=list)
+    automation_locked: bool = True
 
 
 class AnalysisResponse(BaseModel):

@@ -161,7 +161,7 @@ SENTINEL_CLASSES=person
 Luego puedes ampliar:
 
 ```env
-SENTINEL_CLASSES=person,car,backpack,cell phone,knife
+SENTINEL_CLASSES=person,car,backpack,cell phone,knife,gun
 ```
 
 ## n8n

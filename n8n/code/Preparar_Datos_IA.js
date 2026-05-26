@@ -1,10 +1,25 @@
 const payload = $json.body ?? $json;
+if (payload.entrada && payload.resultado && payload.decision) {
+  return [{ json: payload }];
+}
 const contexto = payload.contexto ?? payload.context ?? {};
 const tracking = payload.tracking ?? {};
 const memoria = payload.memoria ?? payload.memory ?? {};
 
 function normalizeObject(value) {
-  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
+  const normalized = String(value ?? "").trim().toLowerCase().replace(/[_\s]+/g, "_");
+  const aliases = {
+    pistol: "gun",
+    pistola: "gun",
+    handgun: "gun",
+    firearm: "gun",
+    weapon: "gun",
+    arma: "gun",
+    cellphone: "cell_phone",
+    mobile_phone: "cell_phone",
+    phone: "cell_phone",
+  };
+  return aliases[normalized] ?? normalized;
 }
 
 function numberOrDefault(value, fallback = 0) {

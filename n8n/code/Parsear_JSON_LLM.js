@@ -26,35 +26,48 @@ function clamp(value, min, max, fallback) {
 }
 
 function riskFromScore(score) {
-  if (score >= 80) return "CRITICO";
-  if (score >= 50) return "ALTO";
-  if (score >= 25) return "MEDIO";
+  if (score >= 90) return "CRITICO";
+  if (score >= 70) return "ALTO";
+  if (score >= 30) return "MEDIO";
   return "BAJO";
 }
 
 function actionFromRisk(risk, confidence) {
+  const reviewActions = ["CONFIRMAR_AMENAZA", "FALSO_POSITIVO", "REQUIERE_MAS_REVISION"];
   if (risk === "CRITICO") {
     return {
-      accion: "ALERTA_CRITICA",
+      accion: "SOLICITAR_VALIDACION_URGENTE",
       prioridad: 10,
       notificar: true,
-      canales: ["telegram", "dashboard_realtime"],
+      canales: ["telegram_supervisor", "dashboard_realtime"],
+      requiere_revision_humana: true,
+      estado_revision_humana: "PENDIENTE",
+      acciones_humanas_permitidas: reviewActions,
+      automatizacion_bloqueada: true,
     };
   }
   if (risk === "ALTO") {
     return {
-      accion: "ENVIAR_ALERTA",
+      accion: "SOLICITAR_VALIDACION_HUMANA",
       prioridad: 8,
       notificar: true,
-      canales: ["dashboard_realtime"],
+      canales: ["telegram_supervisor", "dashboard_realtime"],
+      requiere_revision_humana: true,
+      estado_revision_humana: "PENDIENTE",
+      acciones_humanas_permitidas: reviewActions,
+      automatizacion_bloqueada: true,
     };
   }
   if (risk === "MEDIO") {
     return {
-      accion: "MONITOREAR",
+      accion: "SOLICITAR_REVISION_HUMANA",
       prioridad: 5,
-      notificar: false,
-      canales: [],
+      notificar: true,
+      canales: ["telegram_supervisor"],
+      requiere_revision_humana: true,
+      estado_revision_humana: "PENDIENTE",
+      acciones_humanas_permitidas: reviewActions,
+      automatizacion_bloqueada: true,
     };
   }
   const accion = confidence < 0.5 ? "IGNORAR_BAJA_CONFIANZA" : "REGISTRAR_EVENTO";
@@ -63,6 +76,10 @@ function actionFromRisk(risk, confidence) {
     prioridad: confidence < 0.5 ? 1 : 2,
     notificar: false,
     canales: [],
+    requiere_revision_humana: false,
+    estado_revision_humana: "NO_REQUERIDA",
+    acciones_humanas_permitidas: [],
+    automatizacion_bloqueada: false,
   };
 }
 
@@ -83,7 +100,7 @@ if (llmConfidence >= 0.65 && llmScore > baseScore) {
 let finalRisk = riskFromScore(finalScore);
 if (llmConfidence >= 0.75 && riskRank[llmRisk] > riskRank[finalRisk]) {
   finalRisk = llmRisk;
-  finalScore = Math.max(finalScore, { MEDIO: 25, ALTO: 50, CRITICO: 80 }[finalRisk] ?? finalScore);
+  finalScore = Math.max(finalScore, { MEDIO: 30, ALTO: 70, CRITICO: 90 }[finalRisk] ?? finalScore);
 }
 if (riskRank[baseRisk] > riskRank[finalRisk]) {
   finalRisk = baseRisk;
@@ -131,7 +148,10 @@ return [
         notificar: decision.notificar,
         canales: decision.canales,
         guardar_en_supabase: true,
-        requiere_revision_humana: ["ALTO", "CRITICO"].includes(finalRisk),
+        requiere_revision_humana: decision.requiere_revision_humana,
+        estado_revision_humana: decision.estado_revision_humana,
+        acciones_humanas_permitidas: decision.acciones_humanas_permitidas,
+        automatizacion_bloqueada: decision.automatizacion_bloqueada,
       },
       persistencia: {
         camara_id: prepared.evento.camara,
@@ -147,6 +167,8 @@ return [
         tracking: prepared.tracking,
         memoria: prepared.memoria,
         resumen_ia: resumenIa,
+        requiere_revision_humana: decision.requiere_revision_humana,
+        estado_revision_humana: decision.estado_revision_humana,
       },
       mensaje: `${decision.accion}: ${finalRisk} con score ${Math.round((finalScore / 100) * 10000) / 10000}`,
       procesado_en: new Date().toISOString(),

@@ -102,36 +102,46 @@ def calculate_risk_score(request: AnalysisRequest) -> tuple[int, list[RiskFactor
     if memory.eventos_previos_24h >= 10:
         add(8, "historial_eventos", "Actividad reciente alta.")
 
-    return max(0, min(score, 120)), factors
+    return max(0, min(score, 100)), factors
 
 
 def decide_action(score: int, risk_level: str, confidence: float) -> ActionDecision:
-    if score >= 101:
+    review_actions = ["CONFIRMAR_AMENAZA", "FALSO_POSITIVO", "REQUIERE_MAS_REVISION"]
+    if score >= 90:
         return ActionDecision(
-            action="ALERTA_CRITICA",
-            accion_tomada="ALERTA_CRITICA",
+            action="SOLICITAR_VALIDACION_URGENTE",
+            accion_tomada="SOLICITAR_VALIDACION_URGENTE",
             priority=10,
             notify=True,
-            channels=["telegram", "dashboard_realtime"],
+            channels=["telegram_supervisor", "dashboard_realtime"],
             requires_human_review=True,
+            human_review_status="PENDIENTE",
+            allowed_human_actions=review_actions,
+            automation_locked=True,
         )
-    if score >= 61:
+    if score >= 70:
         return ActionDecision(
-            action="ENVIAR_ALERTA",
-            accion_tomada="ENVIAR_ALERTA",
+            action="SOLICITAR_VALIDACION_HUMANA",
+            accion_tomada="SOLICITAR_VALIDACION_HUMANA",
             priority=8,
             notify=True,
-            channels=["dashboard_realtime"],
+            channels=["telegram_supervisor", "dashboard_realtime"],
             requires_human_review=True,
+            human_review_status="PENDIENTE",
+            allowed_human_actions=review_actions,
+            automation_locked=True,
         )
-    if score >= 31:
+    if score >= 30:
         return ActionDecision(
-            action="MONITOREAR",
-            accion_tomada="MONITOREAR",
+            action="SOLICITAR_REVISION_HUMANA",
+            accion_tomada="SOLICITAR_REVISION_HUMANA",
             priority=5,
-            notify=False,
-            channels=[],
-            requires_human_review=False,
+            notify=True,
+            channels=["telegram_supervisor"],
+            requires_human_review=True,
+            human_review_status="PENDIENTE",
+            allowed_human_actions=review_actions,
+            automation_locked=True,
         )
 
     action = "IGNORAR_BAJA_CONFIANZA" if confidence < 0.5 else "REGISTRAR_EVENTO"
@@ -142,15 +152,18 @@ def decide_action(score: int, risk_level: str, confidence: float) -> ActionDecis
         notify=False,
         channels=[],
         requires_human_review=False,
+        human_review_status="NO_REQUERIDA",
+        allowed_human_actions=[],
+        automation_locked=False,
     )
 
 
 def classify_risk(score: int) -> str:
-    if score >= 101:
+    if score >= 90:
         return "CRITICO"
-    if score >= 61:
+    if score >= 70:
         return "ALTO"
-    if score >= 31:
+    if score >= 30:
         return "MEDIO"
     return "BAJO"
 
@@ -167,7 +180,19 @@ def infer_behavior(request: AnalysisRequest, risk_level: str) -> str:
 
 
 def normalize_label(value: str | None) -> str:
-    return str(value or "").strip().lower().replace(" ", "_")
+    normalized = str(value or "").strip().lower().replace(" ", "_")
+    aliases = {
+        "pistol": "gun",
+        "pistola": "gun",
+        "handgun": "gun",
+        "firearm": "gun",
+        "weapon": "gun",
+        "arma": "gun",
+        "cellphone": "cell_phone",
+        "mobile_phone": "cell_phone",
+        "phone": "cell_phone",
+    }
+    return aliases.get(normalized, normalized)
 
 
 def is_night(hour: int) -> bool:
