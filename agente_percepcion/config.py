@@ -1,0 +1,52 @@
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+
+def _as_bool(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on", "si", "sí"}
+
+
+def _classes(value: str | None) -> set[str]:
+    if not value:
+        return {"person"}
+    return {item.strip() for item in value.split(",") if item.strip()}
+
+
+@dataclass(frozen=True)
+class Settings:
+    camera_index: int
+    camera_name: str
+    model_path: str
+    confidence: float
+    classes: set[str]
+    event_cooldown_seconds: float
+    database_path: Path
+    n8n_webhook_url: str | None
+    save_images: bool
+    image_dir: Path
+
+
+def get_settings() -> Settings:
+    webhook = os.getenv("SENTINEL_N8N_WEBHOOK_URL", "").strip()
+    return Settings(
+        camera_index=int(os.getenv("SENTINEL_CAMERA_INDEX", "0")),
+        camera_name=os.getenv("SENTINEL_CAMERA_NAME", "PC-01"),
+        model_path=os.getenv("SENTINEL_MODEL", "yolov8n.pt"),
+        confidence=float(os.getenv("SENTINEL_CONFIDENCE", "0.5")),
+        classes=_classes(os.getenv("SENTINEL_CLASSES", "person")),
+        event_cooldown_seconds=float(os.getenv("SENTINEL_EVENT_COOLDOWN_SECONDS", "5")),
+        database_path=Path(os.getenv("SENTINEL_DATABASE_PATH", "database/sentinel_events.sqlite3")),
+        n8n_webhook_url=webhook or None,
+        save_images=_as_bool(os.getenv("SENTINEL_SAVE_IMAGES"), default=False),
+        image_dir=Path(os.getenv("SENTINEL_IMAGE_DIR", "capturas")),
+    )
