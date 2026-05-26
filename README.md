@@ -108,6 +108,7 @@ Endpoints:
 - `POST http://localhost:8010/analyze`
 
 La arquitectura completa esta documentada en `docs/ARCHITECTURE.md`.
+El estado actual y roadmap estan en `docs/ESTADO_ACTUAL.md`.
 
 ## Configuracion importante
 
