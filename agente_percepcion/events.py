@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 
 import requests
 
@@ -40,65 +38,42 @@ class DetectionEvent:
     def to_payload(self) -> dict:
         return asdict(self)
 
+    def to_supabase_row(self) -> dict:
+        return {
+            "objeto": self.objeto,
+            "confianza": self.confianza,
+            "riesgo": self.riesgo.upper(),
+            "detected_at": self.hora,
+            "camara_id": self.camara,
+            "box": list(self.box),
+            "imagen_url": self.imagen,
+        }
 
-class EventStore:
-    def __init__(self, database_path: Path) -> None:
-        self.database_path = database_path
-        self.database_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_schema()
 
-    def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.database_path)
-
-    def _init_schema(self) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS detection_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    created_at TEXT NOT NULL,
-                    camera TEXT NOT NULL,
-                    object TEXT NOT NULL,
-                    confidence REAL NOT NULL,
-                    risk TEXT NOT NULL,
-                    box TEXT NOT NULL,
-                    image_path TEXT
-                )
-                """
+class SupabaseEventStore:
+    def __init__(self, supabase_url: str | None, service_role_key: str | None, table: str) -> None:
+        if not supabase_url or not service_role_key:
+            raise RuntimeError(
+                "Faltan SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en el archivo .env."
             )
+
+        from supabase import create_client
+
+        self._client = create_client(supabase_url, service_role_key)
+        self._table = table
 
     def save(self, event: DetectionEvent) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO detection_events (
-                    created_at, camera, object, confidence, risk, box, image_path
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    event.hora,
-                    event.camara,
-                    event.objeto,
-                    event.confianza,
-                    event.riesgo,
-                    ",".join(str(value) for value in event.box),
-                    event.imagen,
-                ),
-            )
+        self._client.table(self._table).insert(event.to_supabase_row()).execute()
 
     def latest(self, limit: int = 50) -> list[dict]:
-        with self._connect() as connection:
-            connection.row_factory = sqlite3.Row
-            rows = connection.execute(
-                """
-                SELECT id, created_at, camera, object, confidence, risk, box, image_path
-                FROM detection_events
-                ORDER BY id DESC
-                LIMIT ?
-                """,
-                (limit,),
-            ).fetchall()
-        return [dict(row) for row in rows]
+        response = (
+            self._client.table(self._table)
+            .select("*")
+            .order("detected_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return list(response.data or [])
 
 
 class N8nClient:

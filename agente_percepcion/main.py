@@ -8,13 +8,17 @@ import cv2
 from agente_percepcion.camera import Camera
 from agente_percepcion.config import get_settings
 from agente_percepcion.detector import YoloDetector, draw_detections
-from agente_percepcion.events import DetectionEvent, EventStore, N8nClient
+from agente_percepcion.events import DetectionEvent, N8nClient, SupabaseEventStore
 
 
 def run() -> None:
     settings = get_settings()
     detector = YoloDetector(settings.model_path, settings.confidence, settings.classes)
-    store = EventStore(settings.database_path)
+    store = SupabaseEventStore(
+        settings.supabase_url,
+        settings.supabase_service_role_key,
+        settings.supabase_detection_events_table,
+    )
     n8n = N8nClient(settings.n8n_webhook_url)
     last_event_at: dict[str, float] = {}
 

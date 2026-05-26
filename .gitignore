@@ -5,6 +5,7 @@ __pycache__/
 *.py[cod]
 *.sqlite3
 *.db
+node_modules/
 runs/
 agente_percepcion/model/*.pt
 capturas/

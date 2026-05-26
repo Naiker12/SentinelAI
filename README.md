@@ -1,6 +1,6 @@
 # SentinelAI
 
-MVP inicial de `AgentePercepcion`: camara local, deteccion con YOLOv8, eventos JSON, envio opcional a n8n y almacenamiento en SQLite.
+MVP inicial de `AgentePercepcion`: camara local, deteccion con YOLOv8, eventos JSON, envio opcional a n8n y almacenamiento en Supabase.
 
 ## Stack
 
@@ -8,7 +8,8 @@ MVP inicial de `AgentePercepcion`: camara local, deteccion con YOLOv8, eventos J
 - OpenCV
 - YOLOv8 con `ultralytics`
 - FastAPI
-- SQLite
+- Supabase/Postgres
+- Prisma para migraciones
 - n8n mediante webhook
 
 ## Instalacion
@@ -17,13 +18,24 @@ MVP inicial de `AgentePercepcion`: camara local, deteccion con YOLOv8, eventos J
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+npm install
 Copy-Item .env.example .env
 ```
 
-Edita `.env` y coloca tu webhook de n8n si ya lo tienes:
+Edita `.env` y coloca tus variables de n8n y Supabase:
 
 ```env
 SENTINEL_N8N_WEBHOOK_URL=http://localhost:5678/webhook/sentinel-event
+SUPABASE_URL=https://PROJECT_REF.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=SERVICE_ROLE_KEY
+DATABASE_URL=postgres://prisma.PROJECT_REF:PRISMA_PASSWORD@REGION.pooler.supabase.com:5432/postgres
+```
+
+Antes de ejecutar el agente contra Supabase, crea las tablas con Prisma:
+
+```powershell
+npx prisma migrate dev --name init_supabase_schema
+npx prisma generate
 ```
 
 ## Ejecutar camara en tiempo real
@@ -94,7 +106,7 @@ SentinelAI/
     detector.py
     events.py
     main.py
-  database/
+  prisma/
   .env.example
   .gitignore
   README.md

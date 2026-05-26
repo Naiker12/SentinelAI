@@ -1,26 +1,21 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 
 from agente_percepcion.detector import Detection, draw_detections
-from agente_percepcion.events import DetectionEvent, EventStore, N8nClient, risk_for_label
+from agente_percepcion.events import DetectionEvent, N8nClient, risk_for_label
 
 
-def test_detection_event_is_saved(tmp_path: Path) -> None:
-    store = EventStore(tmp_path / "events.sqlite3")
+def test_detection_event_maps_to_supabase_row() -> None:
     detection = Detection(label="person", confidence=0.91, box=(10, 20, 200, 300))
 
     event = DetectionEvent.from_detection(detection, camera_name="PC-01")
-    store.save(event)
+    row = event.to_supabase_row()
 
-    rows = store.latest(limit=5)
-
-    assert len(rows) == 1
-    assert rows[0]["object"] == "person"
-    assert rows[0]["camera"] == "PC-01"
-    assert rows[0]["risk"] == "medio"
+    assert row["objeto"] == "person"
+    assert row["camara_id"] == "PC-01"
+    assert row["riesgo"] == "MEDIO"
+    assert row["box"] == [10, 20, 200, 300]
 
 
 def test_risk_levels() -> None:

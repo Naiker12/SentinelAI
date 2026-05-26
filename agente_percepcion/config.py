@@ -30,7 +30,9 @@ class Settings:
     confidence: float
     classes: set[str]
     event_cooldown_seconds: float
-    database_path: Path
+    supabase_url: str | None
+    supabase_service_role_key: str | None
+    supabase_detection_events_table: str
     n8n_webhook_url: str | None
     save_images: bool
     image_dir: Path
@@ -45,7 +47,11 @@ def get_settings() -> Settings:
         confidence=float(os.getenv("SENTINEL_CONFIDENCE", "0.5")),
         classes=_classes(os.getenv("SENTINEL_CLASSES", "person")),
         event_cooldown_seconds=float(os.getenv("SENTINEL_EVENT_COOLDOWN_SECONDS", "5")),
-        database_path=Path(os.getenv("SENTINEL_DATABASE_PATH", "database/sentinel_events.sqlite3")),
+        supabase_url=os.getenv("SUPABASE_URL", "").strip() or None,
+        supabase_service_role_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip() or None,
+        supabase_detection_events_table=os.getenv(
+            "SUPABASE_DETECTION_EVENTS_TABLE", "detection_events"
+        ),
         n8n_webhook_url=webhook or None,
         save_images=_as_bool(os.getenv("SENTINEL_SAVE_IMAGES"), default=False),
         image_dir=Path(os.getenv("SENTINEL_IMAGE_DIR", "capturas")),

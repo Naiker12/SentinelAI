@@ -1,16 +1,26 @@
 from __future__ import annotations
 
+from functools import lru_cache
+
 from fastapi import FastAPI, Query
 
 from agente_percepcion.camera import Camera
 from agente_percepcion.config import get_settings
 from agente_percepcion.detector import YoloDetector
-from agente_percepcion.events import DetectionEvent, EventStore, N8nClient
+from agente_percepcion.events import DetectionEvent, N8nClient, SupabaseEventStore
 
 
 settings = get_settings()
 app = FastAPI(title="SentinelAI AgentePercepcion", version="0.1.0")
-store = EventStore(settings.database_path)
+
+
+@lru_cache(maxsize=1)
+def get_store() -> SupabaseEventStore:
+    return SupabaseEventStore(
+        settings.supabase_url,
+        settings.supabase_service_role_key,
+        settings.supabase_detection_events_table,
+    )
 
 
 @app.get("/health")
@@ -24,7 +34,7 @@ def health() -> dict:
 
 @app.get("/events")
 def events(limit: int = Query(default=50, ge=1, le=200)) -> list[dict]:
-    return store.latest(limit=limit)
+    return get_store().latest(limit=limit)
 
 
 @app.post("/detect-once")
@@ -39,7 +49,7 @@ def detect_once() -> dict:
     saved_events = []
     for detection in detections:
         event = DetectionEvent.from_detection(detection, camera_name=settings.camera_name)
-        store.save(event)
+        get_store().save(event)
         try:
             sent_to_n8n = n8n.send(event)
             n8n_error = None
