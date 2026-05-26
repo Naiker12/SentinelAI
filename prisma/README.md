@@ -9,12 +9,14 @@ En `.env`:
 
 ```env
 DATABASE_URL="postgres://prisma.PROJECT_REF:PRISMA_PASSWORD@REGION.pooler.supabase.com:5432/postgres"
+DIRECT_URL="postgres://postgres.PROJECT_REF:DB_PASSWORD@REGION.pooler.supabase.com:5432/postgres"
 SUPABASE_URL="https://PROJECT_REF.supabase.co"
 SUPABASE_SERVICE_ROLE_KEY="SERVICE_ROLE_KEY"
 SUPABASE_DETECTION_EVENTS_TABLE="detection_events"
 ```
 
-`DATABASE_URL` es para Prisma migrations.
+`DATABASE_URL` es para Prisma Client/runtime.
+`DIRECT_URL` es para Prisma migrations.
 `SUPABASE_SERVICE_ROLE_KEY` es solo para backend local, nunca para frontend.
 
 ## Instalar Prisma

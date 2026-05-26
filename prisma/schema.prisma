@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum RiskLevel {
@@ -15,7 +16,7 @@ enum RiskLevel {
 }
 
 model Camera {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   code      String   @unique @map("codigo")
   name      String   @map("nombre")
   location  String?  @map("ubicacion")
@@ -26,7 +27,7 @@ model Camera {
 }
 
 model DetectionEvent {
-  id         String    @id @default(uuid()) @db.Uuid
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   object     String    @map("objeto")
   confidence Decimal   @map("confianza") @db.Decimal(5, 4)
   risk       RiskLevel @map("riesgo")

@@ -29,6 +29,7 @@ SENTINEL_N8N_WEBHOOK_URL=http://localhost:5678/webhook/sentinel-event
 SUPABASE_URL=https://PROJECT_REF.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=SERVICE_ROLE_KEY
 DATABASE_URL=postgres://prisma.PROJECT_REF:PRISMA_PASSWORD@REGION.pooler.supabase.com:5432/postgres
+DIRECT_URL=postgres://postgres.PROJECT_REF:DB_PASSWORD@REGION.pooler.supabase.com:5432/postgres
 ```
 
 Antes de ejecutar el agente contra Supabase, crea las tablas con Prisma:
