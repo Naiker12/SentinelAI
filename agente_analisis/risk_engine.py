@@ -21,6 +21,8 @@ def analyze_event(request: AnalysisRequest) -> AnalysisResponse:
     result = RiskResult(
         risk_level=risk_level,
         risk_score=score,
+        nivel_riesgo=risk_level,
+        score_riesgo=round(score / 100, 4),
         suspicion_level=risk_level,
         possible_behavior=infer_behavior(request, risk_level),
         factors=factors,
@@ -98,6 +100,7 @@ def decide_action(score: int, risk_level: str, confidence: float) -> ActionDecis
     if score >= 101:
         return ActionDecision(
             action="ALERTA_CRITICA",
+            accion_tomada="ALERTA_CRITICA",
             priority=10,
             notify=True,
             channels=["telegram", "dashboard_realtime"],
@@ -106,6 +109,7 @@ def decide_action(score: int, risk_level: str, confidence: float) -> ActionDecis
     if score >= 61:
         return ActionDecision(
             action="ENVIAR_ALERTA",
+            accion_tomada="ENVIAR_ALERTA",
             priority=8,
             notify=True,
             channels=["dashboard_realtime"],
@@ -114,6 +118,7 @@ def decide_action(score: int, risk_level: str, confidence: float) -> ActionDecis
     if score >= 31:
         return ActionDecision(
             action="MONITOREAR",
+            accion_tomada="MONITOREAR",
             priority=5,
             notify=False,
             channels=[],
@@ -123,6 +128,7 @@ def decide_action(score: int, risk_level: str, confidence: float) -> ActionDecis
     action = "IGNORAR_BAJA_CONFIANZA" if confidence < 0.5 else "REGISTRAR_EVENTO"
     return ActionDecision(
         action=action,
+        accion_tomada=action,
         priority=1 if confidence < 0.5 else 2,
         notify=False,
         channels=[],

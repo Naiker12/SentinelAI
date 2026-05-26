@@ -53,6 +53,8 @@ class RiskFactor(BaseModel):
 class RiskResult(BaseModel):
     risk_level: RiskLevel
     risk_score: int
+    nivel_riesgo: RiskLevel
+    score_riesgo: float
     suspicion_level: RiskLevel
     possible_behavior: str
     factors: list[RiskFactor]
@@ -61,6 +63,7 @@ class RiskResult(BaseModel):
 
 class ActionDecision(BaseModel):
     action: str
+    accion_tomada: str
     priority: int
     notify: bool
     channels: list[str]

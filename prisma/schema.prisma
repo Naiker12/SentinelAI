@@ -27,18 +27,25 @@ model Camera {
 }
 
 model DetectionEvent {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  object     String    @map("objeto")
-  confidence Decimal   @map("confianza") @db.Decimal(5, 4)
-  risk       RiskLevel @map("riesgo")
-  detectedAt DateTime  @default(now()) @map("detected_at") @db.Timestamptz(6)
-  cameraId   String    @map("camara_id")
-  box        Json
-  imageUrl   String?   @map("imagen_url")
-  location   String?   @map("ubicacion")
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  object            String    @map("objeto")
+  confidence        Decimal   @map("confianza") @db.Decimal(5, 4)
+  risk              RiskLevel @map("riesgo")
+  detectedAt        DateTime  @default(now()) @map("detected_at") @db.Timestamptz(6)
+  cameraId          String    @map("camara_id")
+  box               Json
+  imageUrl          String?   @map("imagen_url")
+  location          String?   @map("ubicacion")
+  riskScore         Decimal?  @map("score_riesgo") @db.Decimal(5, 4)
+  riskLevel         String?   @map("nivel_riesgo")
+  action            String?   @map("accion_tomada")
+  previousAlerts24h Int       @default(0) @map("alertas_previas_24h")
+  dayHour           Int?      @map("hora_dia")
+  context           Json?     @map("contexto")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([cameraId, detectedAt(sort: Desc)], map: "idx_detection_events_camera_detected_at")
+  @@index([cameraId, riskLevel, detectedAt(sort: Desc)], map: "idx_detection_events_camera_level_detected_at")
   @@index([detectedAt(sort: Desc)], map: "idx_detection_events_detected_at")
   @@index([risk, detectedAt(sort: Desc)], map: "idx_detection_events_risk_detected_at")
   @@index([object, detectedAt(sort: Desc)], map: "idx_detection_events_object_detected_at")

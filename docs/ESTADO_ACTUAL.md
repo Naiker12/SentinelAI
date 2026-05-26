@@ -404,6 +404,8 @@ npx prisma db execute --file prisma/migrations/20260526120000_init_supabase_sche
 
 ## Lo Que Sigue
 
+El gap analysis y roadmap priorizado estan en `docs/ROADMAP_COMPLETO.md`.
+
 ### Paso 1 - Prueba End-to-End
 
 Objetivo:

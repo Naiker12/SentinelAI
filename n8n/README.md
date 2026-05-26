@@ -90,17 +90,40 @@ http://localhost:5678/webhook-test/sentinel-analysis
   ],
   "resultado": {
     "riesgo": "ALTO",
+    "nivel_riesgo": "ALTO",
     "severidad": "CRITICA",
     "score": 100,
+    "score_riesgo": 1.0,
     "algoritmo": "risk_rules_v1"
   },
   "decision": {
     "accion": "ALERTA_CRITICA",
+    "accion_tomada": "ALERTA_CRITICA",
     "prioridad": 10,
     "notificar": true,
     "canales": ["telegram", "dashboard_realtime"],
     "guardar_en_supabase": true,
     "requiere_revision_humana": true
+  }
+}
+```
+
+El objeto `persistencia` ya viene preparado para guardar el evento enriquecido en Supabase:
+
+```json
+{
+  "camara_id": "PC-01",
+  "objeto": "knife",
+  "confianza": 0.91,
+  "score_riesgo": 1.0,
+  "nivel_riesgo": "ALTO",
+  "accion_tomada": "ALERTA_CRITICA",
+  "alertas_previas_24h": 2,
+  "detected_at": "2026-05-26T20:30:00.000000+00:00",
+  "box": [10, 20, 200, 300],
+  "contexto": {
+    "zona": "entrada_principal",
+    "iluminacion": "baja"
   }
 }
 ```
