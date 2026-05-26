@@ -96,6 +96,19 @@ Endpoints:
 - `GET http://localhost:8000/events`
 - `POST http://localhost:8000/detect-once`
 
+## Ejecutar API central de analisis
+
+```powershell
+uvicorn agente_analisis.api:app --reload --port 8010
+```
+
+Endpoints:
+
+- `GET http://localhost:8010/health`
+- `POST http://localhost:8010/analyze`
+
+La arquitectura completa esta documentada en `docs/ARCHITECTURE.md`.
+
 ## Configuracion importante
 
 La variable `SENTINEL_CLASSES` controla que objetos generan eventos. Para el primer MVP se recomienda dejar solo:
