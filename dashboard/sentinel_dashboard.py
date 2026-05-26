@@ -54,7 +54,7 @@ with st.sidebar:
 
     page = st.radio(
         "Seccion",
-        ["Resumen General", "AgenteTracking", "AgenteMemoria", "Eventos en Vivo"],
+        ["Resumen General", "AgenteRiesgo", "AgenteTracking", "AgenteMemoria", "Eventos en Vivo"],
         label_visibility="collapsed",
     )
     st.divider()
@@ -183,6 +183,7 @@ if page == "Resumen General":
                     "score_riesgo",
                     "nivel_nombre",
                     "accion_nombre",
+                    "track_id",
                 ]
             ].rename(
                 columns={
@@ -197,6 +198,84 @@ if page == "Resumen General":
             use_container_width=True,
             hide_index=True,
         )
+
+elif page == "AgenteRiesgo":
+    st.title("AgenteRiesgo")
+    st.caption("Validacion del score final, factores de contexto y salida IA/n8n.")
+
+    total = len(df)
+    review = len(df[df["nivel_riesgo"].isin(["ALTO", "CRITICO"])])
+    erratic = int(df["movimiento_erratico"].sum()) if total else 0
+    avg_speed = df["velocidad"].mean() if total else 0
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Eventos analizados", total)
+    col2.metric("Revision humana", review)
+    col3.metric("Movimiento erratico", erratic)
+    col4.metric("Velocidad promedio", f"{avg_speed:.1f}")
+
+    col_a, col_b = st.columns([2, 1])
+    with col_a:
+        st.subheader("Riesgo por objeto")
+        risk_by_object = (
+            df.groupby(["objeto_nombre", "nivel_riesgo"])
+            .size()
+            .reset_index(name="eventos")
+        )
+        if risk_by_object.empty:
+            st.info("No hay eventos para analizar.")
+        else:
+            fig = px.bar(
+                risk_by_object,
+                x="objeto_nombre",
+                y="eventos",
+                color="nivel_riesgo",
+                color_discrete_map=COLORS,
+                labels={"objeto_nombre": "Objeto"},
+            )
+            st.plotly_chart(plot_layout(fig), use_container_width=True)
+
+    with col_b:
+        st.subheader("Acciones")
+        actions = df["accion_nombre"].value_counts().reset_index()
+        actions.columns = ["accion", "eventos"]
+        fig = px.bar(actions, x="eventos", y="accion", orientation="h", color="eventos")
+        st.plotly_chart(plot_layout(fig), use_container_width=True)
+
+    st.subheader("Eventos con mayor score")
+    top_risk = df.sort_values("score_riesgo", ascending=False).head(20).copy()
+    top_risk["timestamp"] = top_risk["timestamp"].dt.strftime("%Y-%m-%d %H:%M:%S")
+    st.dataframe(
+        top_risk[
+            [
+                "timestamp",
+                "camara_id",
+                "zona",
+                "objeto_nombre",
+                "confianza",
+                "score_riesgo",
+                "nivel_nombre",
+                "accion_nombre",
+                "track_id",
+                "velocidad",
+                "permanencia_s",
+                "resumen_ia",
+            ]
+        ].rename(
+            columns={
+                "timestamp": "fecha",
+                "camara_id": "camara",
+                "objeto_nombre": "objeto",
+                "score_riesgo": "score",
+                "nivel_nombre": "nivel",
+                "accion_nombre": "accion",
+                "permanencia_s": "permanencia",
+                "resumen_ia": "analisis_ia",
+            }
+        ),
+        use_container_width=True,
+        hide_index=True,
+    )
 
 elif page == "AgenteTracking":
     st.title("AgenteTracking")
@@ -217,12 +296,16 @@ elif page == "AgenteTracking":
         with col_a:
             track_counts = (
                 people.groupby("track_id", dropna=False)
-                .agg(eventos=("track_id", "count"), score_max=("score_riesgo", "max"))
+                .agg(
+                    eventos=("track_id", "count"),
+                    score_max=("score_riesgo", "max"),
+                    velocidad_max=("velocidad", "max"),
+                )
                 .sort_values("eventos", ascending=False)
                 .head(15)
                 .reset_index()
             )
-            fig = px.bar(track_counts, x="track_id", y="eventos", color="score_max")
+            fig = px.bar(track_counts, x="track_id", y="eventos", color="velocidad_max")
             st.plotly_chart(plot_layout(fig), use_container_width=True)
 
         with col_b:
@@ -280,13 +363,25 @@ elif page == "AgenteMemoria":
     memory = df[df["nivel_riesgo"].isin(["ALTO", "CRITICO"])].copy()
     memory["timestamp"] = memory["timestamp"].dt.strftime("%Y-%m-%d %H:%M")
     st.dataframe(
-        memory[["timestamp", "camara_id", "zona", "objeto_nombre", "confianza", "score_riesgo", "nivel_nombre"]].rename(
+        memory[[
+            "timestamp",
+            "camara_id",
+            "zona",
+            "objeto_nombre",
+            "confianza",
+            "score_riesgo",
+            "nivel_nombre",
+            "eventos_previos_24h",
+            "resumen_ia",
+        ]].rename(
             columns={
                 "timestamp": "fecha",
                 "camara_id": "camara",
                 "objeto_nombre": "objeto",
                 "score_riesgo": "score",
                 "nivel_nombre": "nivel",
+                "eventos_previos_24h": "eventos_24h",
+                "resumen_ia": "analisis_ia",
             }
         ),
         use_container_width=True,
@@ -336,6 +431,9 @@ else:
                 "score_riesgo",
                 "nivel_nombre",
                 "track_id",
+                "velocidad",
+                "permanencia_s",
+                "resumen_ia",
                 "accion_nombre",
             ]
         ].rename(
@@ -345,6 +443,8 @@ else:
                 "objeto_nombre": "objeto",
                 "score_riesgo": "score",
                 "nivel_nombre": "nivel",
+                "permanencia_s": "permanencia",
+                "resumen_ia": "analisis_ia",
                 "accion_nombre": "accion",
             }
         ),

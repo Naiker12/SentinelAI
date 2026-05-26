@@ -103,6 +103,27 @@ streamlit run
 Si `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` estan configuradas, el dashboard lee `detection_events`.
 Si no puede conectarse, usa datos simulados realistas.
 
+## Diagnosticar camara
+
+Si la ventana de la camara muestra ruido, lineas de colores o imagen corrupta,
+prueba backends y formatos antes de ejecutar todo el agente:
+
+```powershell
+python tools/check_camera.py --indices 0,1,2 --backends directshow,msmf,any --fourcc MJPG
+```
+
+Si `directshow` se ve mal, prueba:
+
+```env
+SENTINEL_CAMERA_BACKEND=msmf
+SENTINEL_CAMERA_WIDTH=640
+SENTINEL_CAMERA_HEIGHT=480
+SENTINEL_CAMERA_FPS=30
+SENTINEL_CAMERA_FOURCC=MJPG
+```
+
+Si sigue corrupta, cambia `SENTINEL_CAMERA_INDEX=1` o usa `SENTINEL_CAMERA_FOURCC=YUY2`.
+
 ## Ejecutar API local
 
 ```powershell

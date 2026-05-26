@@ -106,6 +106,8 @@ def generate_events(count: int = 300) -> pd.DataFrame:
         else:
             track_id = None
             permanence = None
+        speed = round(random.uniform(0, 12), 2) if track_id else 0.0
+        erratic = bool(track_id and random.random() < 0.12)
 
         rows.append(
             {
@@ -122,6 +124,15 @@ def generate_events(count: int = 300) -> pd.DataFrame:
                 "nivel_nombre": LEVEL_LABELS[level],
                 "track_id": track_id,
                 "permanencia_s": permanence,
+                "velocidad": speed,
+                "movimiento_erratico": erratic,
+                "eventos_previos_24h": random.randint(0, 20),
+                "resumen_ia": (
+                    "Objeto peligroso con contexto de seguimiento."
+                    if level in {"ALTO", "CRITICO"}
+                    else ""
+                ),
+                "factores_ia": [],
                 "hora": hour,
                 "dia_semana": timestamp.strftime("%A"),
             }
@@ -156,16 +167,35 @@ def normalize_supabase_events(rows: list[dict]) -> pd.DataFrame:
         df["zona"] = df.get("ubicacion", "Sin zona")
     df["zona"] = df["zona"].fillna("Sin zona")
 
+    context_series = df["contexto"] if "contexto" in df.columns else pd.Series([{}] * len(df))
+    tracking_series = context_series.map(_context_tracking)
+    memory_series = context_series.map(_context_memory)
+
     if "track_id" not in df.columns:
-        df["track_id"] = None
+        df["track_id"] = tracking_series.map(lambda value: value.get("track_id") or value.get("person_id"))
     if "permanencia_s" not in df.columns:
-        df["permanencia_s"] = None
+        df["permanencia_s"] = tracking_series.map(lambda value: value.get("permanencia_segundos"))
+    if "velocidad" not in df.columns:
+        df["velocidad"] = tracking_series.map(lambda value: value.get("velocidad"))
+    if "movimiento_erratico" not in df.columns:
+        df["movimiento_erratico"] = tracking_series.map(lambda value: value.get("movimiento_erratico", False))
+    if "resumen_ia" not in df.columns:
+        df["resumen_ia"] = context_series.map(lambda value: _safe_dict(value).get("resumen_ia"))
+    if "factores_ia" not in df.columns:
+        df["factores_ia"] = context_series.map(lambda value: _safe_dict(value).get("factores_ia"))
+    if "eventos_previos_24h" not in df.columns:
+        df["eventos_previos_24h"] = memory_series.map(lambda value: value.get("eventos_previos_24h", 0))
 
     df["hora"] = df.get("hora_dia")
     df["hora"] = pd.to_numeric(df["hora"], errors="coerce")
     df["hora"] = df["hora"].fillna(df["timestamp"].dt.hour).astype(int)
     df["dia_semana"] = df["timestamp"].dt.strftime("%A")
     df["confianza"] = pd.to_numeric(df.get("confianza", 0.0), errors="coerce").fillna(0.0)
+    df["permanencia_s"] = pd.to_numeric(df["permanencia_s"], errors="coerce")
+    df["velocidad"] = pd.to_numeric(df["velocidad"], errors="coerce").fillna(0.0)
+    df["movimiento_erratico"] = df["movimiento_erratico"].fillna(False).astype(bool)
+    df["eventos_previos_24h"] = pd.to_numeric(df["eventos_previos_24h"], errors="coerce").fillna(0).astype(int)
+    df["resumen_ia"] = df["resumen_ia"].fillna("")
     df["camara_id"] = df.get("camara_id", "PC-01")
     df["objeto"] = df.get("objeto", "unknown")
     df["objeto_nombre"] = df["objeto"].map(OBJECT_LABELS).fillna(df["objeto"])
@@ -190,6 +220,11 @@ def dashboard_columns() -> list[str]:
         "objeto_nombre",
         "track_id",
         "permanencia_s",
+        "velocidad",
+        "movimiento_erratico",
+        "eventos_previos_24h",
+        "resumen_ia",
+        "factores_ia",
         "hora",
         "dia_semana",
     ]
@@ -200,6 +235,20 @@ def normalize_timestamp_series(series: pd.Series) -> pd.Series:
     fallback = pd.Timestamp.now(tz="UTC")
     timestamps = timestamps.fillna(fallback)
     return timestamps.dt.tz_convert(None)
+
+
+def _safe_dict(value) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def _context_tracking(value) -> dict:
+    context = _safe_dict(value)
+    return _safe_dict(context.get("tracking"))
+
+
+def _context_memory(value) -> dict:
+    context = _safe_dict(value)
+    return _safe_dict(context.get("memoria"))
 
 
 def load_events(limit: int = 500) -> tuple[pd.DataFrame, str]:

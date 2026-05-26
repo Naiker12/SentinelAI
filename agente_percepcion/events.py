@@ -48,15 +48,44 @@ class DetectionEvent:
         payload = asdict(self)
         return {key: value for key, value in payload.items() if value is not None}
 
-    def to_supabase_row(self) -> dict:
+    def to_supabase_row(self, analysis_response: dict | list | str | None = None) -> dict:
+        enriched = _extract_persistence(analysis_response)
+        context = self.contexto or {}
+        if self.tracking:
+            context = {**context, "tracking": self.tracking}
+        if self.memoria:
+            context = {**context, "memoria": self.memoria}
+        if enriched.get("contexto"):
+            context = {**context, **enriched["contexto"]}
+        if enriched.get("tracking"):
+            context = {**context, "tracking": enriched["tracking"]}
+        if enriched.get("memoria"):
+            context = {**context, "memoria": enriched["memoria"]}
+        if enriched.get("resumen_ia"):
+            context = {**context, "resumen_ia": enriched["resumen_ia"]}
+        if enriched.get("factores_ia"):
+            context = {**context, "factores_ia": enriched["factores_ia"]}
+
+        detected_at = enriched.get("detected_at") or self.hora
+        risk_level = str(enriched.get("nivel_riesgo") or self.riesgo).upper()
+        score = enriched.get("score_riesgo")
+        action = enriched.get("accion_tomada")
+        previous_alerts = enriched.get("alertas_previas_24h")
+
         return {
             "objeto": self.objeto,
             "confianza": self.confianza,
             "riesgo": self.riesgo.upper(),
-            "detected_at": self.hora,
+            "detected_at": detected_at,
             "camara_id": self.camara,
             "box": list(self.box),
             "imagen_url": self.imagen,
+            "score_riesgo": score,
+            "nivel_riesgo": risk_level,
+            "accion_tomada": action,
+            "alertas_previas_24h": previous_alerts or 0,
+            "hora_dia": _hour_from_isoformat(detected_at),
+            "contexto": context or None,
         }
 
 
@@ -72,8 +101,8 @@ class SupabaseEventStore:
         self._client = create_client(supabase_url, service_role_key)
         self._table = table
 
-    def save(self, event: DetectionEvent) -> None:
-        self._client.table(self._table).insert(event.to_supabase_row()).execute()
+    def save(self, event: DetectionEvent, analysis_response: dict | list | str | None = None) -> None:
+        self._client.table(self._table).insert(event.to_supabase_row(analysis_response)).execute()
 
     def latest(self, limit: int = 50) -> list[dict]:
         response = (
@@ -102,6 +131,16 @@ class N8nClient:
     def send(self, event: DetectionEvent) -> N8nResult:
         if not self.webhook_url:
             return N8nResult(sent=False, error="SENTINEL_N8N_WEBHOOK_URL no esta configurado.")
+        if "/webhook-test/" in self.webhook_url:
+            return N8nResult(
+                sent=False,
+                error=(
+                    "La camara esta usando una URL de prueba de n8n. "
+                    "Cambia SENTINEL_N8N_WEBHOOK_URL a "
+                    f"{self.webhook_url.replace('/webhook-test/', '/webhook/')} "
+                    "y activa el workflow."
+                ),
+            )
 
         try:
             response = requests.post(
@@ -115,6 +154,14 @@ class N8nClient:
                 status_code=response.status_code,
                 response=_parse_response(response),
             )
+        except requests.HTTPError as exc:
+            hint = ""
+            if exc.response is not None and exc.response.status_code == 404:
+                hint = (
+                    " Revisa que el workflow este activo y que el path del Webhook sea "
+                    "'sentinel-analysis'."
+                )
+            return N8nResult(sent=False, error=f"{exc}{hint}")
         except requests.RequestException as exc:
             return N8nResult(sent=False, error=str(exc))
 
@@ -135,3 +182,20 @@ def _parse_response(response: requests.Response) -> dict | list | str | None:
         return response.json()
     except ValueError:
         return response.text
+
+
+def _extract_persistence(response: dict | list | str | None) -> dict:
+    if isinstance(response, list) and response:
+        response = response[0]
+    if not isinstance(response, dict):
+        return {}
+    if isinstance(response.get("persistencia"), dict):
+        return response["persistencia"]
+    return {}
+
+
+def _hour_from_isoformat(value: str) -> int | None:
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).hour
+    except ValueError:
+        return None

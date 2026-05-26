@@ -7,13 +7,20 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
-load_dotenv()
+ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+load_dotenv(dotenv_path=ENV_FILE, override=True)
 
 
 def _as_bool(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on", "si"}
+
+
+def _as_optional_int(value: str | None) -> int | None:
+    if not value or not value.strip():
+        return None
+    return int(value)
 
 
 def _classes(value: str | None) -> set[str]:
@@ -24,9 +31,14 @@ def _classes(value: str | None) -> set[str]:
 
 @dataclass(frozen=True)
 class Settings:
+    env_file: Path
     camera_index: int
     camera_backend: str
     camera_name: str
+    camera_width: int | None
+    camera_height: int | None
+    camera_fps: int | None
+    camera_fourcc: str | None
     model_path: str
     confidence: float
     classes: set[str]
@@ -45,9 +57,14 @@ class Settings:
 def get_settings() -> Settings:
     webhook = os.getenv("SENTINEL_N8N_WEBHOOK_URL", "").strip()
     return Settings(
+        env_file=ENV_FILE,
         camera_index=int(os.getenv("SENTINEL_CAMERA_INDEX", "0")),
         camera_backend=os.getenv("SENTINEL_CAMERA_BACKEND", "auto"),
         camera_name=os.getenv("SENTINEL_CAMERA_NAME", "PC-01"),
+        camera_width=_as_optional_int(os.getenv("SENTINEL_CAMERA_WIDTH")),
+        camera_height=_as_optional_int(os.getenv("SENTINEL_CAMERA_HEIGHT")),
+        camera_fps=_as_optional_int(os.getenv("SENTINEL_CAMERA_FPS")),
+        camera_fourcc=os.getenv("SENTINEL_CAMERA_FOURCC", "MJPG").strip() or None,
         model_path=os.getenv("SENTINEL_MODEL", "yolov8n.pt"),
         confidence=float(os.getenv("SENTINEL_CONFIDENCE", "0.5")),
         classes=_classes(os.getenv("SENTINEL_CLASSES", "person")),

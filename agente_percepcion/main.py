@@ -14,6 +14,8 @@ from agente_percepcion.tracking import EventMemory, ObjectTracker, should_emit_e
 
 def run() -> None:
     settings = get_settings()
+    print(f"Configuracion cargada desde: {settings.env_file}")
+    print(f"Webhook n8n: {settings.n8n_webhook_url or 'NO CONFIGURADO'}")
     detector = YoloDetector(settings.model_path, settings.confidence, settings.classes)
     store = SupabaseEventStore(
         settings.supabase_url,
@@ -28,7 +30,14 @@ def run() -> None:
     if settings.save_images:
         settings.image_dir.mkdir(parents=True, exist_ok=True)
 
-    with Camera(settings.camera_index, backend=settings.camera_backend) as camera:
+    with Camera(
+        settings.camera_index,
+        backend=settings.camera_backend,
+        width=settings.camera_width,
+        height=settings.camera_height,
+        fps=settings.camera_fps,
+        fourcc=settings.camera_fourcc,
+    ) as camera:
         while True:
             frame = camera.read()
             detections = detector.detect(frame)
@@ -76,8 +85,8 @@ def run() -> None:
                     },
                     memoria=memory_snapshot,
                 )
-                store.save(event)
-                _send_to_n8n(n8n, event)
+                n8n_result = _send_to_n8n(n8n, event)
+                store.save(event, n8n_result.response)
                 memory.remember(now, event.riesgo)
                 print(event.to_payload())
 
@@ -116,13 +125,14 @@ def _distance(a: tuple[float, float], b: tuple[float, float]) -> float:
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
 
 
-def _send_to_n8n(n8n: N8nClient, event: DetectionEvent) -> None:
+def _send_to_n8n(n8n: N8nClient, event: DetectionEvent):
     result = n8n.send(event)
     if not result.sent:
         print(f"n8n no recibio el evento: {result.error}")
-        return
+        return result
 
     print(f"n8n respondio ({result.status_code}): {result.response}")
+    return result
 
 
 if __name__ == "__main__":

@@ -42,15 +42,22 @@ def detect_once() -> dict:
     detector = YoloDetector(settings.model_path, settings.confidence, settings.classes)
     n8n = N8nClient(settings.n8n_webhook_url)
 
-    with Camera(settings.camera_index, backend=settings.camera_backend) as camera:
+    with Camera(
+        settings.camera_index,
+        backend=settings.camera_backend,
+        width=settings.camera_width,
+        height=settings.camera_height,
+        fps=settings.camera_fps,
+        fourcc=settings.camera_fourcc,
+    ) as camera:
         frame = camera.read()
         detections = detector.detect(frame)
 
     saved_events = []
     for detection in detections:
         event = DetectionEvent.from_detection(detection, camera_name=settings.camera_name)
-        get_store().save(event)
         n8n_result = n8n.send(event)
+        get_store().save(event, n8n_result.response)
         saved_events.append(
             {
                 **event.to_payload(),

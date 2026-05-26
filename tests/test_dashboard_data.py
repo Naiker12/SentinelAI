@@ -51,3 +51,40 @@ def test_normalize_supabase_events_adds_spanish_labels() -> None:
     assert df.iloc[0]["objeto_nombre"] == "Celular"
     assert df.iloc[0]["nivel_nombre"] == "Bajo"
     assert df.iloc[0]["accion_nombre"] == "Registrar evento"
+
+
+def test_normalize_supabase_events_reads_tracking_and_ia_context() -> None:
+    rows = [
+        {
+            "detected_at": "2026-05-26T23:00:00+00:00",
+            "camara_id": "PC-01",
+            "objeto": "knife",
+            "confianza": 0.91,
+            "riesgo": "ALTO",
+            "score_riesgo": 0.92,
+            "nivel_riesgo": "CRITICO",
+            "accion_tomada": "ALERTA_CRITICA",
+            "box": [1, 2, 3, 4],
+            "contexto": {
+                "zona": "entrada",
+                "tracking": {
+                    "track_id": "knife_0001",
+                    "person_id": "person_0001",
+                    "velocidad": 8.5,
+                    "permanencia_segundos": 120,
+                    "movimiento_erratico": True,
+                },
+                "memoria": {"eventos_previos_24h": 9},
+                "resumen_ia": "Objeto peligroso con persona asociada.",
+            },
+        }
+    ]
+
+    df = normalize_supabase_events(rows)
+
+    assert df.iloc[0]["track_id"] == "knife_0001"
+    assert df.iloc[0]["permanencia_s"] == 120
+    assert df.iloc[0]["velocidad"] == 8.5
+    assert df.iloc[0]["movimiento_erratico"] == True
+    assert df.iloc[0]["eventos_previos_24h"] == 9
+    assert "persona asociada" in df.iloc[0]["resumen_ia"]

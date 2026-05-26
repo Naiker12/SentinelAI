@@ -90,12 +90,25 @@ def test_n8n_ia_code_snippets_are_present() -> None:
     prepare = Path("n8n/code/Preparar_Datos_IA.js")
     parser = Path("n8n/code/Parsear_JSON_LLM.js")
     prompt = Path("n8n/code/SYSTEM_PROMPT_AGENTE_ANALISIS_IA.md")
+    risk = Path("n8n/code/Calcular_Riesgo_Code.js")
+    memory = Path("n8n/code/Preparar_Memoria_Sheets.js")
+    telegram = Path("n8n/code/Preparar_Alerta_Telegram.js")
+    responder = Path("n8n/code/Responder_Webhook_Final.js")
+    guide = Path("n8n/FLUJO_IA_RIESGO.md")
 
     assert prepare.exists()
     assert parser.exists()
     assert prompt.exists()
+    assert risk.exists()
+    assert memory.exists()
+    assert telegram.exists()
+    assert responder.exists()
+    assert guide.exists()
     assert "prompt_ia" in prepare.read_text(encoding="utf-8")
     assert "risk_rules_v2_plus_llm_guarded" in parser.read_text(encoding="utf-8")
+    assert "risk_rules_v3_history_llm_guarded" in risk.read_text(encoding="utf-8")
+    assert "score_riesgo" in memory.read_text(encoding="utf-8")
+    assert "Alerta_Final_Telegram" in guide.read_text(encoding="utf-8")
     assert "Responde solo JSON valido" in prompt.read_text(encoding="utf-8")
 
 
@@ -103,6 +116,10 @@ def test_n8n_ia_code_snippets_have_valid_javascript_syntax() -> None:
     for path in [
         Path("n8n/code/Preparar_Datos_IA.js"),
         Path("n8n/code/Parsear_JSON_LLM.js"),
+        Path("n8n/code/Calcular_Riesgo_Code.js"),
+        Path("n8n/code/Preparar_Memoria_Sheets.js"),
+        Path("n8n/code/Preparar_Alerta_Telegram.js"),
+        Path("n8n/code/Responder_Webhook_Final.js"),
     ]:
         result = subprocess.run(
             ["node", "--check", str(path)],

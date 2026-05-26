@@ -12,6 +12,10 @@ from cv2.typing import MatLike
 class Camera:
     index: int = 0
     backend: str = "auto"
+    width: int | None = None
+    height: int | None = None
+    fps: int | None = None
+    fourcc: str | None = "MJPG"
     read_retries: int = 15
 
     def __post_init__(self) -> None:
@@ -44,9 +48,14 @@ class Camera:
                 errors.append(f"{name}: no abrio")
                 continue
 
+            _configure_capture(capture, self.width, self.height, self.fps, self.fourcc)
             frame = self._read_with_retries(capture)
             if frame is not None:
-                print(f"Camara abierta: index={self.index}, backend={name}")
+                height, width = frame.shape[:2]
+                print(
+                    "Camara abierta: "
+                    f"index={self.index}, backend={name}, size={width}x{height}"
+                )
                 return capture
 
             capture.release()
@@ -84,3 +93,22 @@ def _backend_candidates(preferred: str) -> list[tuple[str, int]]:
         ]
 
     return [("any", cv2.CAP_ANY)]
+
+
+def _configure_capture(
+    capture: cv2.VideoCapture,
+    width: int | None,
+    height: int | None,
+    fps: int | None,
+    fourcc: str | None,
+) -> None:
+    if fourcc:
+        normalized = fourcc.strip().upper()
+        if len(normalized) == 4:
+            capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*normalized))
+    if width:
+        capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+    if height:
+        capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+    if fps:
+        capture.set(cv2.CAP_PROP_FPS, fps)

@@ -40,6 +40,9 @@ El nodo IA solo recomienda y explica. El nodo `Parsear_JSON_LLM` valida la respu
 combina IA con reglas y devuelve el JSON final. Asi evitamos que una respuesta mal
 formada del modelo rompa el flujo o tome decisiones sin control.
 
+Para el flujo completo con historial, switch de riesgo, Telegram y memoria, usa
+la guia `n8n/FLUJO_IA_RIESGO.md`.
+
 ## Importar
 
 1. Abre n8n.

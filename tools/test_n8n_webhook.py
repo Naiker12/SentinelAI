@@ -11,7 +11,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prueba el webhook de n8n sin abrir la camara.")
     parser.add_argument(
         "--url",
-        default="http://localhost:5678/webhook-test/sentinel-analysis",
+        default="http://localhost:5678/webhook/sentinel-analysis",
         help="URL del webhook de n8n.",
     )
     parser.add_argument(

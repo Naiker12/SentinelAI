@@ -19,6 +19,33 @@ def test_detection_event_maps_to_supabase_row() -> None:
     assert row["box"] == [10, 20, 200, 300]
 
 
+def test_detection_event_maps_n8n_persistence_to_supabase_row() -> None:
+    detection = Detection(label="knife", confidence=0.91, box=(10, 20, 200, 300))
+    event = DetectionEvent.from_detection(detection, camera_name="PC-01")
+    response = {
+        "persistencia": {
+            "score_riesgo": 0.95,
+            "nivel_riesgo": "CRITICO",
+            "accion_tomada": "ALERTA_CRITICA",
+            "alertas_previas_24h": 2,
+            "detected_at": "2026-05-26T23:30:00+00:00",
+            "contexto": {"zona": "entrada"},
+            "tracking": {"track_id": "knife_0001", "person_id": "person_0001"},
+            "memoria": {"eventos_previos_24h": 12},
+            "resumen_ia": "Objeto peligroso asociado a una persona.",
+        }
+    }
+
+    row = event.to_supabase_row(response)
+
+    assert row["score_riesgo"] == 0.95
+    assert row["nivel_riesgo"] == "CRITICO"
+    assert row["accion_tomada"] == "ALERTA_CRITICA"
+    assert row["hora_dia"] == 23
+    assert row["contexto"]["tracking"]["person_id"] == "person_0001"
+    assert row["contexto"]["resumen_ia"] == "Objeto peligroso asociado a una persona."
+
+
 def test_risk_levels() -> None:
     assert risk_for_label("knife") == "alto"
     assert risk_for_label("gun") == "alto"
@@ -44,6 +71,23 @@ def test_n8n_without_webhook_does_not_send() -> None:
 
     assert result.sent is False
     assert result.error is not None
+
+
+def test_n8n_rejects_test_webhook_for_camera_flow() -> None:
+    event = DetectionEvent(
+        objeto="person",
+        confianza=0.91,
+        hora="2026-05-26T00:00:00+00:00",
+        camara="PC-01",
+        riesgo="bajo",
+        box=(10, 20, 200, 300),
+    )
+
+    result = N8nClient("http://localhost:5678/webhook-test/sentinel-analysis").send(event)
+
+    assert result.sent is False
+    assert result.error is not None
+    assert "/webhook/sentinel-analysis" in result.error
 
 
 def test_detection_event_includes_analysis_context() -> None:
