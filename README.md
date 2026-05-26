@@ -84,6 +84,15 @@ cell_phone
 
 Los escenarios como `normal`, `pelea` y `robo` se usan para ordenar la recoleccion. Mas adelante se analizan con reglas o modelos de accion.
 
+## Ejecutar dashboard local
+
+```powershell
+streamlit run dashboard/sentinel_dashboard.py
+```
+
+Si `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` estan configuradas, el dashboard lee `detection_events`.
+Si no puede conectarse, usa datos simulados realistas.
+
 ## Ejecutar API local
 
 ```powershell

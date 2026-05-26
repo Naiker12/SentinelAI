@@ -1,0 +1,187 @@
+from __future__ import annotations
+
+import os
+import random
+from datetime import datetime, timedelta
+
+import pandas as pd
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+
+LEVEL_ORDER = ["BAJO", "MEDIO", "ALTO", "CRITICO"]
+OBJECTS = ["person", "knife", "gun", "backpack", "cell_phone", "scissors"]
+CAMERAS = ["PC-01", "CAM-02", "CAM-03", "CAM-04"]
+ZONES = ["Entrada principal", "Pasillo central", "Patio trasero", "Estacionamiento"]
+ACTIONS = {
+    "BAJO": "REGISTRAR_EVENTO",
+    "MEDIO": "MONITOREAR",
+    "ALTO": "ENVIAR_ALERTA",
+    "CRITICO": "ALERTA_CRITICA",
+}
+RISK_BASE = {
+    "gun": 0.95,
+    "knife": 0.80,
+    "scissors": 0.50,
+    "backpack": 0.35,
+    "cell_phone": 0.15,
+    "person": 0.20,
+}
+
+
+def level_from_score(score: float) -> str:
+    if score < 0.35:
+        return "BAJO"
+    if score < 0.60:
+        return "MEDIO"
+    if score < 0.80:
+        return "ALTO"
+    return "CRITICO"
+
+
+def score_from_level(level: str) -> float:
+    return {
+        "BAJO": 0.20,
+        "MEDIO": 0.45,
+        "ALTO": 0.70,
+        "CRITICO": 0.90,
+    }.get(str(level).upper(), 0.20)
+
+
+def generate_events(count: int = 300) -> pd.DataFrame:
+    random.seed(42)
+    now = datetime.now()
+    rows: list[dict] = []
+    tracking_ids: dict[str, list[str]] = {}
+
+    for _ in range(count):
+        timestamp = now - timedelta(hours=random.expovariate(0.15))
+        obj = random.choices(OBJECTS, weights=[40, 12, 5, 18, 20, 5])[0]
+        camera_index = random.randint(0, len(CAMERAS) - 1)
+        camera = CAMERAS[camera_index]
+        zone = ZONES[camera_index]
+        confidence = round(random.uniform(0.50, 0.99), 2)
+        hour = timestamp.hour
+
+        score = RISK_BASE[obj] + (confidence - 0.5) * 0.3
+        if 0 <= hour < 6:
+            score += 0.20
+        score += random.uniform(-0.05, 0.05)
+        score = round(min(max(score, 0.0), 1.0), 2)
+        level = level_from_score(score)
+
+        tracking_ids.setdefault(camera, [])
+        if obj == "person":
+            if not tracking_ids[camera] or random.random() < 0.3:
+                track_id = f"T{random.randint(100, 999)}"
+                tracking_ids[camera].append(track_id)
+                tracking_ids[camera] = tracking_ids[camera][-5:]
+            else:
+                track_id = random.choice(tracking_ids[camera])
+            permanence = round(random.uniform(0.5, 45.0), 1)
+        else:
+            track_id = None
+            permanence = None
+
+        rows.append(
+            {
+                "timestamp": timestamp,
+                "camara_id": camera,
+                "zona": zone,
+                "objeto": obj,
+                "confianza": confidence,
+                "score_riesgo": score,
+                "nivel_riesgo": level,
+                "accion_tomada": ACTIONS[level],
+                "track_id": track_id,
+                "permanencia_s": permanence,
+                "hora": hour,
+                "dia_semana": timestamp.strftime("%A"),
+            }
+        )
+
+    return pd.DataFrame(rows).sort_values("timestamp", ascending=False).reset_index(drop=True)
+
+
+def normalize_supabase_events(rows: list[dict]) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame(columns=dashboard_columns())
+
+    df = pd.DataFrame(rows)
+    if "timestamp" not in df.columns:
+        df["timestamp"] = df.get("detected_at", df.get("created_at"))
+    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    df["timestamp"] = df["timestamp"].fillna(pd.Timestamp.now())
+
+    if "nivel_riesgo" not in df.columns or df["nivel_riesgo"].isna().all():
+        df["nivel_riesgo"] = df.get("riesgo", "BAJO")
+    df["nivel_riesgo"] = df["nivel_riesgo"].fillna(df.get("riesgo", "BAJO")).astype(str).str.upper()
+
+    if "score_riesgo" not in df.columns:
+        df["score_riesgo"] = df["nivel_riesgo"].map(score_from_level)
+    df["score_riesgo"] = pd.to_numeric(df["score_riesgo"], errors="coerce")
+    df["score_riesgo"] = df["score_riesgo"].fillna(df["nivel_riesgo"].map(score_from_level)).fillna(0.0)
+
+    if "accion_tomada" not in df.columns:
+        df["accion_tomada"] = df["nivel_riesgo"].map(ACTIONS)
+    df["accion_tomada"] = df["accion_tomada"].fillna(df["nivel_riesgo"].map(ACTIONS))
+
+    if "zona" not in df.columns:
+        df["zona"] = df.get("ubicacion", "Sin zona")
+    df["zona"] = df["zona"].fillna("Sin zona")
+
+    if "track_id" not in df.columns:
+        df["track_id"] = None
+    if "permanencia_s" not in df.columns:
+        df["permanencia_s"] = None
+
+    df["hora"] = df.get("hora_dia")
+    df["hora"] = pd.to_numeric(df["hora"], errors="coerce")
+    df["hora"] = df["hora"].fillna(df["timestamp"].dt.hour).astype(int)
+    df["dia_semana"] = df["timestamp"].dt.strftime("%A")
+    df["confianza"] = pd.to_numeric(df.get("confianza", 0.0), errors="coerce").fillna(0.0)
+    df["camara_id"] = df.get("camara_id", "PC-01")
+    df["objeto"] = df.get("objeto", "unknown")
+
+    return df[dashboard_columns()].sort_values("timestamp", ascending=False).reset_index(drop=True)
+
+
+def dashboard_columns() -> list[str]:
+    return [
+        "timestamp",
+        "camara_id",
+        "zona",
+        "objeto",
+        "confianza",
+        "score_riesgo",
+        "nivel_riesgo",
+        "accion_tomada",
+        "track_id",
+        "permanencia_s",
+        "hora",
+        "dia_semana",
+    ]
+
+
+def load_events(limit: int = 500) -> tuple[pd.DataFrame, str]:
+    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    if not supabase_url or not supabase_key:
+        return generate_events(300), "Datos simulados"
+
+    try:
+        from supabase import create_client
+
+        client = create_client(supabase_url, supabase_key)
+        response = (
+            client.table("detection_events")
+            .select("*")
+            .order("detected_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return normalize_supabase_events(response.data or []), "Supabase real"
+    except Exception as exc:
+        return generate_events(300), f"Datos simulados: {exc}"
