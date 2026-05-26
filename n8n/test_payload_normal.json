@@ -1,0 +1,22 @@
+{
+  "objeto": "person",
+  "confianza": 0.84,
+  "hora": "2026-05-26T15:30:00.000000+00:00",
+  "camara": "PC-01",
+  "box": [50, 40, 260, 420],
+  "imagen": null,
+  "contexto": {
+    "zona": "pasillo",
+    "iluminacion": "normal"
+  },
+  "tracking": {
+    "person_id": "track_02",
+    "velocidad": 1.4,
+    "permanencia_segundos": 35,
+    "movimiento_erratico": false
+  },
+  "memoria": {
+    "eventos_previos_24h": 1,
+    "alertas_previas_24h": 0
+  }
+}

@@ -4,5 +4,19 @@
   "hora": "2026-05-26T20:30:00.000000+00:00",
   "camara": "PC-01",
   "box": [10, 20, 200, 300],
-  "imagen": null
+  "imagen": null,
+  "contexto": {
+    "zona": "entrada_principal",
+    "iluminacion": "baja"
+  },
+  "tracking": {
+    "person_id": "track_14",
+    "velocidad": 8.2,
+    "permanencia_segundos": 420,
+    "movimiento_erratico": true
+  },
+  "memoria": {
+    "eventos_previos_24h": 12,
+    "alertas_previas_24h": 2
+  }
 }
