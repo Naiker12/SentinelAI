@@ -42,7 +42,7 @@ def detect_once() -> dict:
     detector = YoloDetector(settings.model_path, settings.confidence, settings.classes)
     n8n = N8nClient(settings.n8n_webhook_url)
 
-    with Camera(settings.camera_index) as camera:
+    with Camera(settings.camera_index, backend=settings.camera_backend) as camera:
         frame = camera.read()
         detections = detector.detect(frame)
 

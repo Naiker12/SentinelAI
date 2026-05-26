@@ -8,6 +8,8 @@ from pathlib import Path
 
 import cv2
 
+from agente_percepcion.camera import Camera
+
 
 SCENARIOS = {
     "normal",
@@ -21,6 +23,11 @@ SCENARIOS = {
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Captura imagenes para el dataset SentinelAI.")
     parser.add_argument("--camera", type=int, default=0, help="Indice de la camara.")
+    parser.add_argument(
+        "--backend",
+        default="auto",
+        help="Backend de OpenCV: auto, directshow, dshow, msmf o any.",
+    )
     parser.add_argument("--scenario", required=True, choices=sorted(SCENARIOS))
     parser.add_argument("--label", required=True, help="Clase esperada: person, knife, gun, etc.")
     parser.add_argument("--output", default="dataset/raw", help="Directorio base del dataset raw.")
@@ -81,38 +88,32 @@ def main() -> None:
     auto_capture = False
     last_capture_at = 0.0
 
-    capture = cv2.VideoCapture(args.camera)
-    if not capture.isOpened():
-        raise RuntimeError(f"No se pudo abrir la camara con indice {args.camera}.")
-
     try:
-        while True:
-            ok, frame = capture.read()
-            if not ok:
-                raise RuntimeError("No se pudo leer un frame de la camara.")
+        with Camera(args.camera, backend=args.backend) as camera:
+            while True:
+                frame = camera.read()
 
-            preview = frame.copy()
-            draw_overlay(preview, scenario, label, auto_capture)
-            cv2.imshow("SentinelAI Dataset Capture", preview)
+                preview = frame.copy()
+                draw_overlay(preview, scenario, label, auto_capture)
+                cv2.imshow("SentinelAI Dataset Capture", preview)
 
-            now = time.monotonic()
-            if auto_capture and now - last_capture_at >= args.interval:
-                path = save_frame(frame, base_dir, scenario, label)
-                print(f"Imagen guardada: {path}")
-                last_capture_at = now
+                now = time.monotonic()
+                if auto_capture and now - last_capture_at >= args.interval:
+                    path = save_frame(frame, base_dir, scenario, label)
+                    print(f"Imagen guardada: {path}")
+                    last_capture_at = now
 
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord("s"):
-                path = save_frame(frame, base_dir, scenario, label)
-                print(f"Imagen guardada: {path}")
-            elif key == ord("a"):
-                auto_capture = not auto_capture
-                last_capture_at = 0.0
-                print(f"Captura automatica: {'ON' if auto_capture else 'OFF'}")
-            elif key == ord("q"):
-                break
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord("s"):
+                    path = save_frame(frame, base_dir, scenario, label)
+                    print(f"Imagen guardada: {path}")
+                elif key == ord("a"):
+                    auto_capture = not auto_capture
+                    last_capture_at = 0.0
+                    print(f"Captura automatica: {'ON' if auto_capture else 'OFF'}")
+                elif key == ord("q"):
+                    break
     finally:
-        capture.release()
         cv2.destroyAllWindows()
 
 

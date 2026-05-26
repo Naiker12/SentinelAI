@@ -13,7 +13,7 @@ load_dotenv()
 def _as_bool(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
-    return value.strip().lower() in {"1", "true", "yes", "on", "si", "sí"}
+    return value.strip().lower() in {"1", "true", "yes", "on", "si"}
 
 
 def _classes(value: str | None) -> set[str]:
@@ -25,6 +25,7 @@ def _classes(value: str | None) -> set[str]:
 @dataclass(frozen=True)
 class Settings:
     camera_index: int
+    camera_backend: str
     camera_name: str
     model_path: str
     confidence: float
@@ -42,6 +43,7 @@ def get_settings() -> Settings:
     webhook = os.getenv("SENTINEL_N8N_WEBHOOK_URL", "").strip()
     return Settings(
         camera_index=int(os.getenv("SENTINEL_CAMERA_INDEX", "0")),
+        camera_backend=os.getenv("SENTINEL_CAMERA_BACKEND", "auto"),
         camera_name=os.getenv("SENTINEL_CAMERA_NAME", "PC-01"),
         model_path=os.getenv("SENTINEL_MODEL", "yolov8n.pt"),
         confidence=float(os.getenv("SENTINEL_CONFIDENCE", "0.5")),

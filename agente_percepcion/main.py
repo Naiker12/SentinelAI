@@ -25,7 +25,7 @@ def run() -> None:
     if settings.save_images:
         settings.image_dir.mkdir(parents=True, exist_ok=True)
 
-    with Camera(settings.camera_index) as camera:
+    with Camera(settings.camera_index, backend=settings.camera_backend) as camera:
         while True:
             frame = camera.read()
             detections = detector.detect(frame)
