@@ -89,8 +89,8 @@ http://localhost:5678/webhook-test/sentinel-analysis
     "AgenteMemoria"
   ],
   "resultado": {
-    "riesgo": "ALTO",
-    "nivel_riesgo": "ALTO",
+    "riesgo": "CRITICO",
+    "nivel_riesgo": "CRITICO",
     "severidad": "CRITICA",
     "score": 100,
     "score_riesgo": 1.0,
@@ -116,7 +116,7 @@ El objeto `persistencia` ya viene preparado para guardar el evento enriquecido e
   "objeto": "knife",
   "confianza": 0.91,
   "score_riesgo": 1.0,
-  "nivel_riesgo": "ALTO",
+  "nivel_riesgo": "CRITICO",
   "accion_tomada": "ALERTA_CRITICA",
   "alertas_previas_24h": 2,
   "detected_at": "2026-05-26T20:30:00.000000+00:00",
