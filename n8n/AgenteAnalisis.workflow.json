@@ -1,0 +1,86 @@
+{
+  "name": "AgenteAnalisis",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sentinel-analysis",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f42ec764-c667-4c7f-a695-41b87723f8e1",
+      "name": "Webhook - Evento Percepcion",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -620,
+        0
+      ],
+      "webhookId": "sentinel-analysis"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $json.body ?? $json;\n\nconst objeto = String(payload.objeto ?? payload.object ?? '').trim().toLowerCase();\nconst confianza = Number(payload.confianza ?? payload.confidence ?? 0);\nconst camara = String(payload.camara ?? payload.camera ?? 'unknown');\nconst hora = String(payload.hora ?? new Date().toISOString());\nconst box = payload.box ?? null;\nconst imagen = payload.imagen ?? payload.image_path ?? null;\n\nconst reglas = {\n  alto: new Set(['knife', 'gun', 'scissors']),\n  medio: new Set(['person', 'car', 'truck', 'backpack', 'cell phone'])\n};\n\nlet riesgo = 'BAJO';\nlet accion = 'MONITOREAR';\nlet prioridad = 2;\nlet motivo = 'Objeto sin regla de amenaza alta.';\n\nif (!objeto) {\n  riesgo = 'DESCONOCIDO';\n  accion = 'REVISAR_PAYLOAD';\n  prioridad = 1;\n  motivo = 'No se recibio el campo objeto.';\n} else if (reglas.alto.has(objeto) && confianza >= 0.6) {\n  riesgo = 'ALTO';\n  accion = 'ENVIAR_ALERTA';\n  prioridad = 10;\n  motivo = `Objeto peligroso detectado: ${objeto}.`;\n} else if (reglas.medio.has(objeto) && confianza >= 0.5) {\n  riesgo = 'MEDIO';\n  accion = 'REGISTRAR_Y_MONITOREAR';\n  prioridad = 5;\n  motivo = `Objeto relevante detectado: ${objeto}.`;\n} else if (confianza < 0.5) {\n  riesgo = 'BAJO';\n  accion = 'IGNORAR_BAJA_CONFIANZA';\n  prioridad = 1;\n  motivo = `Confianza baja: ${confianza}.`;\n}\n\nreturn [\n  {\n    json: {\n      status: 'procesado',\n      agente: 'AgenteAnalisis',\n      version: '0.1.0',\n      entrada: {\n        objeto,\n        confianza,\n        camara,\n        hora,\n        box,\n        imagen\n      },\n      resultado: {\n        riesgo,\n        accion,\n        prioridad,\n        motivo\n      },\n      procesado_en: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "id": "cc6f34c4-62c0-477b-af39-a91e930770cb",
+      "name": "AgenteAnalisis - Evaluar Riesgo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "f028c8d3-0806-4d6c-a3cc-f7b3f7e39fbf",
+      "name": "Responder a AgentePercepcion",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -60,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Evento Percepcion": {
+      "main": [
+        [
+          {
+            "node": "AgenteAnalisis - Evaluar Riesgo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AgenteAnalisis - Evaluar Riesgo": {
+      "main": [
+        [
+          {
+            "node": "Responder a AgentePercepcion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "6d0bb27b-b180-4d63-9b2e-6f91c7e1e3f0",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

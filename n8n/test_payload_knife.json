@@ -1,0 +1,8 @@
+{
+  "objeto": "knife",
+  "confianza": 0.91,
+  "hora": "2026-05-26T20:30:00.000000+00:00",
+  "camara": "PC-01",
+  "box": [10, 20, 200, 300],
+  "imagen": null
+}
