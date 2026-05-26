@@ -90,6 +90,12 @@ Los escenarios como `normal`, `pelea` y `robo` se usan para ordenar la recolecci
 streamlit run dashboard/sentinel_dashboard.py
 ```
 
+Desde la carpeta `dashboard/` tambien funciona:
+
+```powershell
+streamlit run
+```
+
 Si `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` estan configuradas, el dashboard lee `detection_events`.
 Si no puede conectarse, usa datos simulados realistas.
 
