@@ -47,6 +47,43 @@ python -m agente_percepcion.main
 
 Presiona `q` para cerrar la ventana de camara.
 
+## Crear dataset propio
+
+Captura imagenes reales con la webcam:
+
+```powershell
+python tools/capture_dataset.py --scenario objeto_sospechoso --label knife
+```
+
+Controles:
+
+- `s`: guardar frame actual.
+- `a`: activar/desactivar captura automatica.
+- `q`: salir.
+
+La estructura del dataset vive en:
+
+```text
+dataset/
+  raw/
+  yolo/images/
+  yolo/labels/
+  data.yaml
+  classes.txt
+```
+
+Para la primera version del modelo personalizado usa clases fisicas:
+
+```text
+person
+knife
+gun
+backpack
+cell_phone
+```
+
+Los escenarios como `normal`, `pelea` y `robo` se usan para ordenar la recoleccion. Mas adelante se analizan con reglas o modelos de accion.
+
 ## Ejecutar API local
 
 ```powershell

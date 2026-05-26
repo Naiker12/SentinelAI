@@ -9,3 +9,8 @@ node_modules/
 runs/
 agente_percepcion/model/*.pt
 capturas/
+dataset/raw/**/*
+dataset/yolo/images/**/*
+dataset/yolo/labels/**/*
+dataset/exports/**/*
+!dataset/**/.gitkeep
