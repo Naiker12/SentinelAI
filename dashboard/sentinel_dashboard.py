@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from dashboard.data import ACTIONS, CAMERAS, LEVEL_ORDER, level_from_score, load_events
+from dashboard.data import LEVEL_ORDER, load_events
 
 
 COLORS = {
@@ -316,7 +316,7 @@ with st.sidebar:
     )
     st.divider()
     hours_filter = st.slider("Ultimas N horas", 1, 72, 24)
-    camera_options = sorted(data["camara_id"].dropna().unique().tolist()) or CAMERAS
+    camera_options = sorted(data["camara_id"].dropna().unique().tolist())
     selected_cameras = st.multiselect("Camaras", camera_options, default=camera_options)
     selected_levels = st.multiselect("Nivel riesgo", LEVEL_ORDER, default=LEVEL_ORDER)
     auto_refresh = st.checkbox("Auto-refresh 30s", value=False)

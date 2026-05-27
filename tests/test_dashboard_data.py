@@ -1,15 +1,6 @@
 from __future__ import annotations
 
-from dashboard.data import generate_events, normalize_supabase_events
-
-
-def test_generate_events_has_dashboard_columns() -> None:
-    df = generate_events(10)
-
-    assert len(df) == 10
-    assert {"timestamp", "camara_id", "objeto", "score_riesgo", "nivel_riesgo"}.issubset(
-        df.columns
-    )
+from dashboard.data import load_events, normalize_supabase_events
 
 
 def test_normalize_supabase_events_uses_detected_at() -> None:
@@ -31,6 +22,16 @@ def test_normalize_supabase_events_uses_detected_at() -> None:
     assert df.iloc[0]["nivel_riesgo"] == "MEDIO"
     assert df.iloc[0]["score_riesgo"] > 0
     assert df["timestamp"].dt.tz is None
+
+
+def test_load_events_without_supabase_returns_empty_real_status(monkeypatch) -> None:
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+
+    df, source = load_events()
+
+    assert df.empty
+    assert "Sin datos reales" in source
 
 
 def test_normalize_supabase_events_adds_spanish_labels() -> None:

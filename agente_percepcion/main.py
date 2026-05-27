@@ -28,12 +28,26 @@ def run() -> None:
     settings = get_settings()
     print(f"Configuracion cargada desde: {settings.env_file}")
     print(f"Webhook n8n: {settings.n8n_webhook_url or 'NO CONFIGURADO'}")
+    if settings.n8n_webhook_url and "/webhook-test/" in settings.n8n_webhook_url:
+        print(
+            "ADVERTENCIA: la camara esta apuntando a /webhook-test/. "
+            "Usa /webhook/ con el workflow activo, o define "
+            "SENTINEL_ALLOW_N8N_TEST_WEBHOOK=true solo para pruebas manuales."
+        )
+    if settings.telegram_callback_polling:
+        print(
+            "Callbacks Telegram por polling Python activos. "
+            "Si n8n Telegram Trigger esta activo con el mismo bot, Telegram bloqueara getUpdates."
+        )
     detector = YoloDetector(
         settings.model_path,
         settings.confidence,
         settings.classes,
+        dangerous_confidence=settings.dangerous_confidence,
         debug_detections=settings.debug_detections,
         debug_confidence=settings.debug_confidence,
+        use_model_tracking=settings.yolo_tracking,
+        tracker=settings.yolo_tracker,
     )
     store = SupabaseEventStore(
         settings.supabase_url,
@@ -124,6 +138,10 @@ def run() -> None:
                 )
                 with memory_lock:
                     memory_snapshot = memory.snapshot(now)
+                memory_snapshot = {
+                    **memory_snapshot,
+                    "knn_samples": _historical_knn_samples(store),
+                }
                 event = DetectionEvent.from_detection(
                     detection,
                     camera_name=settings.camera_name,
@@ -271,6 +289,40 @@ def _send_to_telegram(settings, telegram: TelegramSupervisorClient, event: Detec
         print("Telegram recibio evidencia visual para revision humana.")
     else:
         print(f"Telegram no recibio evidencia visual: {result.error}")
+
+
+def _historical_knn_samples(store: SupabaseEventStore, limit: int = 80) -> list[dict]:
+    try:
+        rows = store.latest(limit=limit)
+    except Exception as exc:
+        print(f"No se pudo consultar historial real para KNN: {exc}")
+        return []
+
+    samples = []
+    for row in rows:
+        score = row.get("score_riesgo")
+        if score is None:
+            level = str(row.get("nivel_riesgo") or row.get("riesgo") or "").upper()
+            score = {"CRITICO": 0.95, "ALTO": 0.75, "MEDIO": 0.45, "BAJO": 0.1}.get(level)
+        if score is None:
+            continue
+        try:
+            numeric_score = float(score)
+        except (TypeError, ValueError):
+            continue
+        context = row.get("contexto") if isinstance(row.get("contexto"), dict) else {}
+        samples.append(
+            {
+                "objeto": row.get("objeto"),
+                "confianza": row.get("confianza"),
+                "hora": row.get("detected_at"),
+                "contexto": context,
+                "tracking": context.get("tracking") if isinstance(context.get("tracking"), dict) else {},
+                "memoria": context.get("memoria") if isinstance(context.get("memoria"), dict) else {},
+                "score": round(numeric_score * 100) if numeric_score <= 1 else round(numeric_score),
+            }
+        )
+    return samples
 
 
 if __name__ == "__main__":

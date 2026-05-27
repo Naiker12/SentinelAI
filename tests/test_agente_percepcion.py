@@ -142,6 +142,85 @@ def test_debug_detector_uses_lower_predict_confidence(monkeypatch) -> None:
     assert calls == [0.1]
 
 
+def test_detector_applies_higher_threshold_to_dangerous_objects(monkeypatch) -> None:
+    from agente_percepcion import detector as detector_module
+    from agente_percepcion.detector import YoloDetector
+
+    class FakeBox:
+        cls = [0]
+        conf = [0.33]
+        xyxy = [[10, 20, 30, 40]]
+
+    class FakeModel:
+        names = {0: "arma"}
+
+        def predict(self, frame, conf, verbose):
+            return [type("Result", (), {"names": self.names, "boxes": [FakeBox()]})()]
+
+    monkeypatch.setattr(detector_module, "_configure_ultralytics_runtime", lambda: None)
+    monkeypatch.setitem(
+        sys.modules,
+        "ultralytics",
+        types.SimpleNamespace(YOLO=lambda model_path: FakeModel()),
+    )
+
+    detector = YoloDetector(
+        "yolov8n.pt",
+        confidence=0.25,
+        dangerous_confidence=0.45,
+        allowed_classes={"arma"},
+        use_model_tracking=False,
+    )
+
+    assert detector.detect(np.zeros((10, 10, 3), dtype=np.uint8)) == []
+
+
+def test_detector_uses_ultralytics_tracking_when_available(monkeypatch) -> None:
+    from agente_percepcion import detector as detector_module
+    from agente_percepcion.detector import YoloDetector
+
+    calls = []
+
+    class FakeId:
+        def numel(self):
+            return 1
+
+        def __getitem__(self, index):
+            return 7
+
+    class FakeBox:
+        cls = [0]
+        conf = [0.8]
+        xyxy = [[10, 20, 30, 40]]
+        id = FakeId()
+
+    class FakeModel:
+        names = {0: "arma"}
+
+        def track(self, frame, conf, verbose, persist, tracker):
+            calls.append((conf, persist, tracker))
+            return [type("Result", (), {"names": self.names, "boxes": [FakeBox()]})()]
+
+    monkeypatch.setattr(detector_module, "_configure_ultralytics_runtime", lambda: None)
+    monkeypatch.setitem(
+        sys.modules,
+        "ultralytics",
+        types.SimpleNamespace(YOLO=lambda model_path: FakeModel()),
+    )
+
+    detector = YoloDetector(
+        "yolov8n.pt",
+        confidence=0.5,
+        allowed_classes={"arma"},
+        tracker="botsort.yaml",
+    )
+
+    detections = detector.detect(np.zeros((10, 10, 3), dtype=np.uint8))
+
+    assert calls == [(0.5, True, "botsort.yaml")]
+    assert detections[0].tracking == {"track_id": "arma_0007"}
+
+
 def test_n8n_without_webhook_does_not_send() -> None:
     event = DetectionEvent(
         objeto="person",
@@ -231,6 +310,29 @@ def test_motion_tracker_adds_track_id_and_velocity() -> None:
     assert tracked_second.tracking["track_id"] == tracked_first.tracking["track_id"]
     assert tracked_second.tracking["velocidad"] > 0
     assert tracked_second.tracking["patron_movimiento"] == "en_movimiento"
+
+
+def test_motion_tracker_preserves_detector_track_id() -> None:
+    tracker = MotionTracker()
+    first = Detection(
+        label="arma",
+        confidence=0.8,
+        box=(10, 10, 60, 60),
+        tracking={"track_id": "arma_0042"},
+    )
+    second = Detection(
+        label="arma",
+        confidence=0.82,
+        box=(40, 10, 90, 60),
+        tracking={"track_id": "arma_0042"},
+    )
+
+    tracker.update([first], 10.0)
+    tracked_second = tracker.update([second], 11.0)[0]
+
+    assert tracked_second.tracking is not None
+    assert tracked_second.tracking["track_id"] == "arma_0042"
+    assert tracked_second.tracking["velocidad"] > 0
 
 
 def test_detection_event_can_emit_precomputed_analysis_payload() -> None:

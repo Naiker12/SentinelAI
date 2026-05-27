@@ -1,6 +1,8 @@
 # AgenteAnalisis en n8n
 
-Este workflow recibe eventos del `AgentePercepcion`, normaliza el payload, calcula un score de riesgo y responde con una accion recomendada.
+Este workflow recibe eventos ya analizados por `AgentePercepcion`/`AgenteRiesgo`
+en Python y orquesta la respuesta. n8n no calcula el score de riesgo para evitar
+duplicar logica.
 
 n8n no hace IA pesada. En esta arquitectura n8n orquesta, decide acciones y conecta alertas. La vision artificial y la prediccion pesada deben vivir en Python/FastAPI.
 
@@ -9,7 +11,7 @@ n8n no hace IA pesada. En esta arquitectura n8n orquesta, decide acciones y cone
 ```text
 Webhook - Evento Percepcion
   -> Normalizar Evento
-  -> AgenteRiesgo - Score Hibrido
+  -> AgenteRiesgo - Validar Analisis Python
   -> AgenteAccion - Preparar Respuesta
   -> Responder a AgentePercepcion
 ```
@@ -36,9 +38,9 @@ Codigo para cada nodo:
 - En el campo de entrada del agente IA, envia `{{$json.prompt_ia}}`.
 - `Parsear_JSON_LLM`: pega `n8n/code/Parsear_JSON_LLM.js`.
 
-El nodo IA solo recomienda y explica. El nodo `Parsear_JSON_LLM` valida la respuesta,
-combina IA con reglas y devuelve el JSON final. Asi evitamos que una respuesta mal
-formada del modelo rompa el flujo o tome decisiones sin control.
+El nodo IA solo recomienda y explica. El resultado final de riesgo debe venir de
+Python; cualquier flujo visual con IA debe conservar `resultado` y `decision` del
+AgenteRiesgo oficial.
 
 Para el flujo completo con historial, switch de riesgo, Telegram y memoria, usa
 la guia `n8n/FLUJO_IA_RIESGO.md`.
@@ -65,130 +67,24 @@ Prueba desde el editor con `Listen for test event`:
 http://localhost:5678/webhook-test/sentinel-analysis
 ```
 
-## Contrato minimo recibido desde la camara
+## Contrato recibido desde la camara real
 
-```json
-{
-  "objeto": "arma_blanca",
-  "confianza": 0.91,
-  "hora": "2026-05-26T20:30:00.000000+00:00",
-  "camara": "PC-01",
-  "box": [10, 20, 200, 300],
-  "imagen": null
-}
-```
-
-## Contrato enriquecido desde AgentePercepcion
-
-Cuando ejecutas `python -m agente_percepcion.main`, el agente ya envia contexto,
-memoria y analisis previo. El campo `tracking` se mantiene como compatibilidad y
-normalmente viaja vacio. Los archivos `test_payload_*.json` son solo para validar n8n
-sin abrir la camara.
-
-```json
-{
-  "objeto": "arma_blanca",
-  "confianza": 0.91,
-  "hora": "2026-05-26T23:30:00.000000+00:00",
-  "camara": "PC-01",
-  "box": [10, 20, 200, 300],
-  "imagen": null,
-  "contexto": {
-    "zona": "entrada_principal",
-    "iluminacion": "baja",
-    "cantidad_personas": 1
-  },
-  "tracking": {},
-  "memoria": {
-    "eventos_previos_24h": 12,
-    "alertas_previas_24h": 2
-  }
-}
-```
+La camara real debe enviar el contrato enriquecido que produce
+`agente_analisis.risk_engine`. Si n8n recibe un evento crudo sin `resultado` y
+`decision`, lo rechaza con `RECHAZAR_EVENTO_SIN_ANALISIS`.
 
 ## Respuesta esperada
 
-```json
-{
-  "status": "procesado",
-  "pipeline": [
-    "AgentePercepcion",
-    "AgenteAnalisis",
-    "AgenteRiesgo",
-    "AgenteAccion",
-    "AgenteMemoria"
-  ],
-  "resultado": {
-    "riesgo": "CRITICO",
-    "nivel_riesgo": "CRITICO",
-    "severidad": "CRITICA",
-    "score": 100,
-    "score_riesgo": 1.0,
-    "algoritmo": "risk_rules_v5_seguridad_multiclase"
-  },
-  "decision": {
-    "accion": "ALERTA_CRITICA",
-    "accion_tomada": "ALERTA_CRITICA",
-    "prioridad": 10,
-    "notificar": true,
-    "canales": ["telegram", "dashboard_realtime"],
-    "guardar_en_supabase": true,
-    "requiere_revision_humana": true
-  }
-}
-```
+n8n devuelve el mismo analisis oficial de Python, enriquecido con estado de
+orquestacion y datos listos para persistencia/notificacion.
 
-El objeto `persistencia` ya viene preparado para guardar el evento enriquecido en Supabase:
-
-```json
-{
-  "camara_id": "PC-01",
-  "objeto": "arma_blanca",
-  "confianza": 0.91,
-  "score_riesgo": 1.0,
-  "nivel_riesgo": "CRITICO",
-  "accion_tomada": "ALERTA_CRITICA",
-  "alertas_previas_24h": 2,
-  "detected_at": "2026-05-26T20:30:00.000000+00:00",
-  "box": [10, 20, 200, 300],
-  "contexto": {
-    "zona": "entrada_principal",
-    "iluminacion": "baja"
-  },
-  "tracking": {
-    "person_id": "persona_0001",
-    "track_id": "arma_blanca_0001"
-  }
-}
-```
+El objeto `persistencia` ya viene preparado para guardar el evento enriquecido en Supabase.
 
 ## Reglas actuales
 
-El score va de `0` a `100`.
-
-- `fusil`: base critica.
-- `arma`: base alta.
-- `arma_blanca`: base alta.
-- `violencia`: base alta.
-- `multitud` y `persona_sospechosa`: base media.
-- `persona`, `no_violencia`, `cell_phone`, `backpack`, `car`, `truck`, `motorcycle`: base baja.
-- Confianza alta suma puntos.
-- Confianza baja resta puntos.
-- Horario nocturno suma puntos.
-- Baja iluminacion suma puntos.
-- Velocidad alta suma puntos.
-- Movimiento erratico suma puntos.
-- Permanencia mayor a 5 o 15 minutos suma puntos.
-- Historial reciente de eventos o alertas suma puntos.
-
-Niveles:
-
-- `0-29`: `BAJO`
-- `30-69`: `MEDIO`
-- `70-89`: `ALTO`
-- `90-100`: `CRITICO`
-
-Importante: una persona, `no_violencia` o un celular no son sospechosos por si solos. Suben de nivel solo con contexto, horario, objeto peligroso o historial.
+Las reglas viven solo en `agente_analisis/risk_engine.py`. El algoritmo oficial es
+`risk_rules_v2_knn_temporal`: reglas deterministicas, tracking temporal, memoria y
+KNN historico. n8n solo valida que esos campos existan y orquesta notificaciones.
 
 ## Como debe quedar en n8n para camara real
 
@@ -203,32 +99,30 @@ Importante: una persona, `no_violencia` o un celular no son sospechosos por si s
 No uses `/webhook-test/sentinel-analysis` con la camara real salvo que tengas el
 editor de n8n abierto esperando un unico evento de prueba.
 
-## Pruebas con curl
+## Pruebas
 
-Alto riesgo:
-
-```powershell
-curl.exe -X POST http://localhost:5678/webhook-test/sentinel-analysis -H "Content-Type: application/json" --data-binary "@n8n/test_payload_knife.json"
-```
-
-Caso normal:
+La prueba real recomendada es ejecutar la camara, porque Python genera el JSON
+enriquecido con `resultado` y `decision`:
 
 ```powershell
-curl.exe -X POST http://localhost:5678/webhook-test/sentinel-analysis -H "Content-Type: application/json" --data-binary "@n8n/test_payload_normal.json"
+python -m agente_percepcion.main
 ```
+
+Si quieres probar con `curl`, usa un payload capturado del agente real y ya
+analizado por Python. Los eventos crudos seran rechazados por diseno.
 
 ## Prueba recomendada desde Python
 
 Antes de abrir la camara, prueba n8n asi:
 
 ```powershell
-python tools/test_n8n_webhook.py --payload n8n/test_payload_knife.json
+python tools/test_n8n_webhook.py --payload ruta\al\payload_analizado.json
 ```
 
 Si el workflow esta activo, usa la URL productiva:
 
 ```powershell
-python tools/test_n8n_webhook.py --url http://localhost:5678/webhook/sentinel-analysis --payload n8n/test_payload_knife.json
+python tools/test_n8n_webhook.py --url http://localhost:5678/webhook/sentinel-analysis --payload ruta\al\payload_analizado.json
 ```
 
 ## Si parece que no pasa nada

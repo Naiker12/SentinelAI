@@ -1,8 +1,8 @@
 # Flujo IA + AgenteRiesgo + Supervisor Humano en n8n
 
 Este flujo usa IA como analista contextual, pero la decision final la valida
-el motor de reglas con historial y limites. Para riesgos `MEDIO`, `ALTO` y
-`CRITICO`, la accion final queda bloqueada hasta que un supervisor humano valide.
+el motor Python `agente_analisis.risk_engine`. n8n no recalcula riesgo: valida
+el resultado recibido, notifica, procesa botones y orquesta la respuesta.
 
 El vocabulario activo del modelo `yolo_percepcion` es:
 
@@ -19,7 +19,7 @@ en ingles (`gun`, `knife`, `person`), pero normalizan todo a las clases nuevas.
 ```text
 Webhook - Evento Percepcion
   -> Normalizar Evento
-  -> AgenteRiesgo - Score Hibrido
+  -> AgenteRiesgo - Validar Analisis Python
   -> AgenteAccion - Preparar Respuesta
   -> Requiere Revision Humana?
       true:
@@ -36,11 +36,16 @@ Webhook - Callback Telegram Supervisor
 Telegram Trigger - Callback Supervisor
   -> AgenteInterfazHumana - Procesar Callback
   -> Responder Callback Telegram
+  -> Telegram Supervisor - Responder Callback
 ```
 
 El workflow `n8n/AgenteAnalisis.workflow.json` ya contiene estos nodos. Python recibe
 respuesta rapido por `Responder a AgentePercepcion`; la validacion por Telegram queda
-como rama paralela/asíncrona cuando `decision.requiere_revision_humana=true`.
+como rama paralela/asincrona cuando `decision.requiere_revision_humana=true`.
+
+Si llega un payload crudo sin `entrada`, `resultado` y `decision`, n8n responde
+`RECHAZAR_EVENTO_SIN_ANALISIS`. Eso es intencional: hay un solo AgenteRiesgo
+oficial y vive en Python.
 
 ## Evidencia visual en Supabase Storage
 
@@ -264,3 +269,4 @@ La IA y Groq pueden recomendar o explicar, pero no deben cambiar
 
 El `Respond to Webhook` debe responder con el JSON que sale de
 `Responder_Webhook_Final.js`. Ese JSON es el que Python guarda luego en Supabase.
+

@@ -8,7 +8,9 @@ import requests
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Prueba el webhook de n8n sin abrir la camara.")
+    parser = argparse.ArgumentParser(
+        description="Prueba el webhook de n8n con un JSON real ya analizado por Python."
+    )
     parser.add_argument(
         "--url",
         default="http://localhost:5678/webhook/sentinel-analysis",
@@ -16,8 +18,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--payload",
-        default="n8n/test_payload_knife.json",
-        help="Archivo JSON a enviar.",
+        required=True,
+        help="Archivo JSON analizado a enviar.",
     )
     return parser.parse_args()
 

@@ -43,10 +43,16 @@ def detect_once() -> dict:
         settings.model_path,
         settings.confidence,
         settings.classes,
+        dangerous_confidence=settings.dangerous_confidence,
         debug_detections=settings.debug_detections,
         debug_confidence=settings.debug_confidence,
+        use_model_tracking=settings.yolo_tracking,
+        tracker=settings.yolo_tracker,
     )
-    n8n = N8nClient(settings.n8n_webhook_url)
+    n8n = N8nClient(
+        settings.n8n_webhook_url,
+        allow_test_webhook=settings.allow_n8n_test_webhook,
+    )
 
     with Camera(
         settings.camera_index,

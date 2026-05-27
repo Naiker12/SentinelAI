@@ -84,7 +84,7 @@ SentinelAI hoy es un MVP funcional de vision artificial con:
 8. Dashboard:
    - Existe en Streamlit.
    - Lee Supabase si hay credenciales.
-   - Si no puede leer Supabase, genera datos simulados.
+   - Si no puede leer Supabase, muestra estado sin datos reales.
    - Tiene paginas para resumen, riesgo, tracking, memoria y eventos en vivo.
 
 Stack general del proyecto
@@ -769,7 +769,7 @@ Paginas:
 Fuente de datos:
 
 - Supabase real si SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY existen.
-- Datos simulados si no hay conexion o credenciales.
+- Estado sin datos reales si no hay conexion o credenciales.
 
 Campos que espera:
 

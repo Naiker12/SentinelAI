@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from agente_analisis.risk_engine import analyze_event
+from agente_analisis.risk_engine import knn_risk_score
 from agente_analisis.schemas import (
     AnalysisRequest,
     MemoryContext,
@@ -171,3 +172,30 @@ def test_analysis_marks_persona_sospechosa_as_medium_risk() -> None:
     assert response.result.risk_level == "MEDIO"
     assert response.result.possible_behavior == "persona_conducta_sospechosa"
     assert response.decision.requires_human_review is True
+
+
+def test_knn_uses_real_historical_samples_when_available() -> None:
+    request = AnalysisRequest(
+        evento=PerceptionEvent(
+            objeto="arma",
+            confianza=0.6,
+            hora=datetime(2026, 5, 27, 20, 30, tzinfo=timezone.utc),
+            camara="PC-01",
+        ),
+        tracking=TrackingContext(track_id="arma_0003", velocidad=40),
+        memoria=MemoryContext(
+            knn_samples=[
+                {
+                    "objeto": "arma",
+                    "confianza": 0.6,
+                    "hora": "2026-05-27T20:16:36+00:00",
+                    "contexto": {"cantidad_personas": 1},
+                    "tracking": {"velocidad": 40, "permanencia_segundos": 0},
+                    "memoria": {},
+                    "score": 96,
+                }
+            ]
+        ),
+    )
+
+    assert knn_risk_score(request) >= 90

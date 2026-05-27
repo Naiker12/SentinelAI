@@ -47,76 +47,23 @@ AgenteAnalisis
 n8n
   -> Webhook sentinel-analysis
   -> acepta resultado precomputado de Python
-  -> mantiene fallback de normalizacion y score simple
   -> orquesta alertas y persistencia
 ```
 
 El contrato preferido ahora es `Python calcula, n8n orquesta`. Si el payload ya trae
 `entrada`, `resultado`, `decision` y `persistencia`, el workflow no debe recalcular
-el riesgo. Los nodos de riesgo en n8n quedan como fallback para pruebas manuales o
-payloads antiguos.
+el riesgo. Si llega un payload crudo, n8n responde `RECHAZAR_EVENTO_SIN_ANALISIS`
+para evitar dos fuentes de verdad.
 
 ## Contrato del AgenteAnalisis
 
-Entrada:
-
-```json
-{
-  "evento": {
-    "objeto": "arma_blanca",
-    "confianza": 0.91,
-    "hora": "2026-05-26T23:40:00Z",
-    "camara": "PC-01",
-    "box": [10, 20, 200, 300],
-    "imagen": null
-  },
-  "contexto": {
-    "zona": "entrada_principal",
-    "iluminacion": "baja",
-    "cantidad_personas": 1
-  },
-  "tracking": {},
-  "memoria": {
-    "eventos_previos_24h": 12,
-    "alertas_previas_24h": 2
-  }
-}
-```
+Entrada: evento detectado, contexto de escena, tracking y memoria real disponible.
 
 ## Contrato Enviado a n8n
 
 `AgentePercepcion` ejecuta el motor Python antes del webhook y envia un objeto listo
-para orquestacion:
-
-```json
-{
-  "entrada": {
-    "objeto": "arma",
-    "confianza": 0.94,
-    "camara": "PC-01",
-    "hora": "2026-05-26T23:40:00Z",
-    "box": [10, 20, 200, 300],
-    "imagen": null
-  },
-  "tracking": {},
-  "resultado": {
-    "nivel_riesgo": "CRITICO",
-    "score": 120,
-    "score_riesgo": 1.2,
-    "algoritmo": "risk_rules_v5_seguridad_multiclase"
-  },
-  "decision": {
-    "accion_tomada": "ALERTA_CRITICA",
-    "notificar": true,
-    "canales": ["telegram", "dashboard_realtime"]
-  },
-  "persistencia": {
-    "camara_id": "PC-01",
-    "objeto": "arma",
-    "nivel_riesgo": "CRITICO"
-  }
-}
-```
+para orquestacion. El contrato debe incluir `entrada`, `tracking`, `memoria`,
+`resultado`, `decision` y `persistencia`.
 
 Groq puede enriquecer `resultado.resumen_ia`, pero no debe reemplazar el score ni
 la decision final del motor de reglas.
@@ -125,24 +72,8 @@ El KNN local compara el evento actual contra prototipos internos de bajo, medio,
 alto y critico usando distancia euclidiana. Solo ajusta el score como factor
 explicable; no reemplaza la deteccion YOLO ni la validacion humana.
 
-Salida:
-
-```json
-{
-  "status": "procesado",
-  "result": {
-    "risk_level": "CRITICO",
-    "risk_score": 120,
-    "possible_behavior": "posible_amenaza_con_objeto_peligroso"
-  },
-  "decision": {
-    "action": "ALERTA_CRITICA",
-    "priority": 10,
-    "notify": true,
-    "channels": ["telegram", "dashboard_realtime"]
-  }
-}
-```
+Salida: resultado normalizado, decision final, factores explicables y datos de
+persistencia para Supabase.
 
 ## Fases
 

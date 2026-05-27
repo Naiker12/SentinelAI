@@ -42,9 +42,13 @@ class MotionTracker:
         return updated
 
     def _new_track(self, detection: Detection, now: float) -> _Track:
-        prefix = detection.label.replace(" ", "_")
-        track_id = f"{prefix}_{self._next_id:04d}"
-        self._next_id += 1
+        seed_track_id = (detection.tracking or {}).get("track_id")
+        if seed_track_id:
+            track_id = str(seed_track_id)
+        else:
+            prefix = detection.label.replace(" ", "_")
+            track_id = f"{prefix}_{self._next_id:04d}"
+            self._next_id += 1
         center = _center(detection.box)
         track = _Track(
             track_id=track_id,
@@ -58,6 +62,12 @@ class MotionTracker:
         return track
 
     def _match(self, detection: Detection, used_tracks: set[str]) -> _Track | None:
+        seed_track_id = (detection.tracking or {}).get("track_id")
+        if seed_track_id:
+            seeded = self._tracks.get(str(seed_track_id))
+            if seeded and seeded.track_id not in used_tracks:
+                return seeded
+
         best_track: _Track | None = None
         best_score = 0.0
         detection_center = _center(detection.box)

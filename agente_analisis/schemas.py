@@ -36,6 +36,7 @@ class SceneContext(BaseModel):
 class MemoryContext(BaseModel):
     eventos_previos_24h: int = 0
     alertas_previas_24h: int = 0
+    knn_samples: list[dict] = Field(default_factory=list)
 
 
 class AnalysisRequest(BaseModel):

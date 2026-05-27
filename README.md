@@ -105,7 +105,7 @@ streamlit run
 ```
 
 Si `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` estan configuradas, el dashboard lee `detection_events`.
-Si no puede conectarse, usa datos simulados realistas.
+Si no puede conectarse, muestra estado sin datos reales y no inventa eventos.
 
 ## Diagnosticar camara
 
@@ -177,29 +177,9 @@ En n8n crea un workflow simple:
 3. Ruta `sentinel-analysis`.
 4. Nodos de analisis, almacenamiento o alerta.
 
-El agente enviara un JSON similar a:
-
-```json
-{
-  "objeto": "persona",
-  "confianza": 0.91,
-  "hora": "2026-05-26T20:30:00.000000+00:00",
-  "camara": "PC-01",
-  "riesgo": "bajo",
-  "box": [10, 20, 200, 300],
-  "imagen": null,
-  "contexto": {
-    "zona": "sin_zona",
-    "iluminacion": "desconocida",
-    "cantidad_personas": 1
-  },
-  "tracking": {},
-  "memoria": {
-    "eventos_previos_24h": 0,
-    "alertas_previas_24h": 0
-  }
-}
-```
+El agente envia el contrato enriquecido por `agente_analisis.risk_engine`, con
+`entrada`, `resultado`, `decision`, `tracking`, `memoria` y `persistencia`.
+n8n rechaza eventos crudos que no hayan pasado por el analisis oficial de Python.
 
 ## Estructura
 

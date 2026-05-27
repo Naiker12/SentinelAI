@@ -18,7 +18,7 @@ def test_agente_analisis_workflow_has_core_nodes() -> None:
 
     assert "Webhook - Evento Percepcion" in node_names
     assert "Normalizar Evento" in node_names
-    assert "AgenteRiesgo - Score Hibrido" in node_names
+    assert "AgenteRiesgo - Validar Analisis Python" in node_names
     assert "AgenteAccion - Preparar Respuesta" in node_names
     assert "Requiere Revision Humana?" in node_names
     assert "AgenteInterfazHumana - Preparar Telegram" in node_names
@@ -37,9 +37,9 @@ def test_agente_analisis_workflow_connections_are_complete() -> None:
 
     assert "Webhook - Evento Percepcion" in connections
     assert connections["Webhook - Evento Percepcion"]["main"][0][0]["node"] == "Normalizar Evento"
-    assert connections["Normalizar Evento"]["main"][0][0]["node"] == "AgenteRiesgo - Score Hibrido"
+    assert connections["Normalizar Evento"]["main"][0][0]["node"] == "AgenteRiesgo - Validar Analisis Python"
     assert (
-        connections["AgenteRiesgo - Score Hibrido"]["main"][0][0]["node"]
+        connections["AgenteRiesgo - Validar Analisis Python"]["main"][0][0]["node"]
         == "AgenteAccion - Preparar Respuesta"
     )
     assert (
@@ -99,23 +99,19 @@ def test_agente_analisis_workflow_returns_persistence_contract() -> None:
     assert "nivel_riesgo" in action_code
     assert "accion_tomada" in action_code
     assert "detected_at" in action_code
-    assert "tracking: {}" in action_code
-    assert "memoria: data.memoria" in action_code
+    assert "tracking: data.persistencia?.tracking ?? data.tracking ?? {}" in action_code
+    assert "memoria: data.persistencia?.memoria ?? data.memoria ?? {}" in action_code
     assert "review_id" in action_code
 
 
 def test_agente_analisis_workflow_uses_security_model_base_scores() -> None:
     workflow = json.loads(Path("n8n/AgenteAnalisis.workflow.json").read_text(encoding="utf-8"))
     code_nodes = {node["name"]: node["parameters"]["jsCode"] for node in workflow["nodes"] if node["type"].endswith(".code")}
-    risk_code = code_nodes["AgenteRiesgo - Score Hibrido"]
+    risk_code = code_nodes["AgenteRiesgo - Validar Analisis Python"]
 
-    assert "cell_phone: 5" in risk_code
-    assert "persona: 10" in risk_code
-    assert "arma_blanca: 65" in risk_code
-    assert "arma: 80" in risk_code
-    assert "fusil: 95" in risk_code
-    assert "violencia: 75" in risk_code
-    assert "no_violencia: 2" in risk_code
+    assert "risk_rules_v2_knn_temporal" in risk_code
+    assert "n8n_orquestador_sin_calculo_riesgo" in risk_code
+    assert "Falta resultado de AgenteRiesgo Python" in risk_code
 
 
 def test_agente_analisis_workflow_normalizes_aliases_to_security_vocab() -> None:
@@ -136,8 +132,8 @@ def test_agente_analisis_workflow_accepts_python_precomputed_result() -> None:
     code_nodes = {node["name"]: node["parameters"]["jsCode"] for node in workflow["nodes"] if node["type"].endswith(".code")}
 
     assert "payload.entrada && payload.resultado && payload.decision" in code_nodes["Normalizar Evento"]
-    assert "data.resultado && data.decision" in code_nodes["AgenteRiesgo - Score Hibrido"]
-    assert "data.persistencia && data.resultado && data.decision" in code_nodes["AgenteAccion - Preparar Respuesta"]
+    assert "data.resultado && data.decision" in code_nodes["AgenteRiesgo - Validar Analisis Python"]
+    assert "data.resultado && data.decision" in code_nodes["AgenteAccion - Preparar Respuesta"]
 
 
 def test_agente_analisis_workflow_blocks_automation_until_human_review() -> None:
@@ -145,8 +141,8 @@ def test_agente_analisis_workflow_blocks_automation_until_human_review() -> None
     code_nodes = {node["name"]: node["parameters"]["jsCode"] for node in workflow["nodes"] if node["type"].endswith(".code")}
     action_code = code_nodes["AgenteAccion - Preparar Respuesta"]
 
-    assert "SOLICITAR_VALIDACION_URGENTE" in action_code
-    assert "telegram_supervisor" in action_code
+    assert "requiere_revision_humana" in action_code
+    assert "telegram_supervisor_pendiente" in action_code
     assert "estado_revision_humana" in action_code
     assert "automatizacion_bloqueada" in action_code
 
@@ -155,21 +151,25 @@ def test_agente_analisis_workflow_uses_no_tracking_contract() -> None:
     workflow = json.loads(Path("n8n/AgenteAnalisis.workflow.json").read_text(encoding="utf-8"))
     code_nodes = {node["name"]: node["parameters"]["jsCode"] for node in workflow["nodes"] if node["type"].endswith(".code")}
     normalize_code = code_nodes["Normalizar Evento"]
-    risk_code = code_nodes["AgenteRiesgo - Score Hibrido"]
+    risk_code = code_nodes["AgenteRiesgo - Validar Analisis Python"]
     action_code = code_nodes["AgenteAccion - Preparar Respuesta"]
 
     assert "cantidad_personas" in normalize_code
-    assert "tracking: {}" in normalize_code
+    assert "tracking" in normalize_code
     assert "persona_asociada_objeto_peligroso" not in risk_code
-    assert "risk_rules_v5_seguridad_multiclase" in risk_code
-    assert "AgenteInterfazHumana" in action_code
+    assert "risk_rules_v5_seguridad_multiclase" not in risk_code
+    assert "n8n no calcula riesgo" in normalize_code
+    assert "interfaz_humana" in action_code
 
 
 def test_n8n_test_payloads_are_valid_json() -> None:
     for path in Path("n8n").glob("test_payload_*.json"):
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert "objeto" in payload
-        assert "confianza" in payload
+        entrada = payload.get("entrada", payload)
+        assert "objeto" in entrada
+        assert "confianza" in entrada
+        if "resultado" in payload:
+            assert "decision" in payload
 
 
 def test_n8n_ia_code_snippets_are_present() -> None:

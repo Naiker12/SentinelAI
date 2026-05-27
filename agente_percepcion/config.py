@@ -45,8 +45,11 @@ class Settings:
     camera_fourcc: str | None
     model_path: str
     confidence: float
+    dangerous_confidence: float
     debug_detections: bool
     debug_confidence: float
+    yolo_tracking: bool
+    yolo_tracker: str
     classes: set[str]
     event_cooldown_seconds: float
     dangerous_event_cooldown_seconds: float
@@ -84,8 +87,11 @@ def get_settings() -> Settings:
             "yolo_percepcion/entrenamiento_seguridad/weights/best.pt",
         ),
         confidence=float(os.getenv("SENTINEL_CONFIDENCE", "0.5")),
+        dangerous_confidence=float(os.getenv("SENTINEL_DANGEROUS_CONFIDENCE", "0.45")),
         debug_detections=_as_bool(os.getenv("SENTINEL_DEBUG_DETECTIONS"), default=False),
         debug_confidence=float(os.getenv("SENTINEL_DEBUG_CONFIDENCE", "0.15")),
+        yolo_tracking=_as_bool(os.getenv("SENTINEL_YOLO_TRACKING"), default=True),
+        yolo_tracker=os.getenv("SENTINEL_YOLO_TRACKER", "botsort.yaml").strip() or "botsort.yaml",
         classes=_classes(os.getenv("SENTINEL_CLASSES", "persona")),
         event_cooldown_seconds=float(os.getenv("SENTINEL_EVENT_COOLDOWN_SECONDS", "5")),
         dangerous_event_cooldown_seconds=float(

@@ -22,8 +22,11 @@ class YoloDetector:
         model_path: str,
         confidence: float,
         allowed_classes: set[str],
+        dangerous_confidence: float = 0.45,
         debug_detections: bool = False,
         debug_confidence: float = 0.15,
+        use_model_tracking: bool = True,
+        tracker: str = "botsort.yaml",
     ) -> None:
         _configure_ultralytics_runtime()
         from ultralytics import YOLO
@@ -35,12 +38,19 @@ class YoloDetector:
             )
         self._model = YOLO(model_path)
         self._confidence = confidence
+        self._dangerous_confidence = dangerous_confidence
         self._allowed_classes = allowed_classes
         self._debug_detections = debug_detections
         self._debug_confidence = debug_confidence
+        self._use_model_tracking = use_model_tracking
+        self._tracker = tracker
         print(f"Modelo YOLO: {model_path}")
         print(f"Clases del modelo: {self._model.names}")
         print(f"Clases habilitadas: {sorted(self._allowed_classes) or 'todas'}")
+        print(
+            "Tracking YOLO: "
+            f"{'activo ' + self._tracker if self._use_model_tracking else 'inactivo'}"
+        )
 
     def detect(self, frame: MatLike) -> list[Detection]:
         predict_confidence = (
@@ -48,7 +58,16 @@ class YoloDetector:
             if self._debug_detections
             else self._confidence
         )
-        results = self._model.predict(frame, conf=predict_confidence, verbose=False)
+        if self._use_model_tracking and hasattr(self._model, "track"):
+            results = self._model.track(
+                frame,
+                conf=predict_confidence,
+                verbose=False,
+                persist=True,
+                tracker=self._tracker,
+            )
+        else:
+            results = self._model.predict(frame, conf=predict_confidence, verbose=False)
         detections: list[Detection] = []
         debug_rows: list[str] = []
 
@@ -59,8 +78,9 @@ class YoloDetector:
                 label = normalize_label(str(names[class_id]))
                 confidence = round(float(box.conf[0]), 4)
                 filtered_reasons = []
-                if confidence < self._confidence:
-                    filtered_reasons.append(f"conf<{self._confidence}")
+                minimum_confidence = self._minimum_confidence_for(label)
+                if confidence < minimum_confidence:
+                    filtered_reasons.append(f"conf<{minimum_confidence}")
                 if self._allowed_classes and label not in self._allowed_classes:
                     filtered_reasons.append("clase_no_habilitada")
                 if self._debug_detections:
@@ -70,12 +90,17 @@ class YoloDetector:
                 if filtered_reasons:
                     continue
 
-                x1, y1, x2, y2 = (int(value) for value in box.xyxy[0].tolist())
+                xyxy = box.xyxy[0]
+                if hasattr(xyxy, "tolist"):
+                    xyxy = xyxy.tolist()
+                x1, y1, x2, y2 = (int(value) for value in xyxy)
+                track_id = _track_id_from_box(box, label)
                 detections.append(
                     Detection(
                         label=label,
                         confidence=confidence,
                         box=(x1, y1, x2, y2),
+                        tracking={"track_id": track_id} if track_id else None,
                     )
                 )
 
@@ -84,17 +109,37 @@ class YoloDetector:
 
         return detections
 
+    def _minimum_confidence_for(self, label: str) -> float:
+        if normalize_label(label) in {"arma", "arma_blanca", "fusil", "violencia"}:
+            return max(self._confidence, self._dangerous_confidence)
+        return self._confidence
+
 
 def draw_detections(frame: MatLike, detections: list[Detection]) -> MatLike:
     for detection in detections:
         x1, y1, x2, y2 = detection.box
         color = _color_for_label(detection.label)
-        text = f"{detection.label.upper()} {detection.confidence:.2f}"
+        text = _detection_text(detection)
 
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         _draw_label(frame, text, x1, y1, color)
 
     return frame
+
+
+def _detection_text(detection: Detection) -> str:
+    tracking = detection.tracking or {}
+    track_id = tracking.get("track_id")
+    speed = tracking.get("velocidad")
+    motion = tracking.get("patron_movimiento")
+    text = f"{detection.label.upper()} {detection.confidence:.2f}"
+    if track_id:
+        text += f" #{str(track_id).split('_')[-1]}"
+    if speed is not None:
+        text += f" v{float(speed):.0f}"
+    if motion == "movimiento_erratico":
+        text += " ERR"
+    return text
 
 
 def _draw_label(frame: MatLike, text: str, x: int, y: int, color: tuple[int, int, int]) -> None:
@@ -174,3 +219,19 @@ def _configure_ultralytics_runtime() -> None:
     mpl_dir.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("YOLO_CONFIG_DIR", str(yolo_dir))
     os.environ.setdefault("MPLCONFIGDIR", str(mpl_dir))
+
+
+def _track_id_from_box(box, label: str) -> str | None:
+    raw_id = getattr(box, "id", None)
+    if raw_id is None:
+        return None
+    try:
+        if hasattr(raw_id, "numel") and raw_id.numel() == 0:
+            return None
+        value = int(raw_id[0])
+    except (TypeError, ValueError, IndexError):
+        try:
+            value = int(raw_id)
+        except (TypeError, ValueError):
+            return None
+    return f"{label}_{value:04d}"

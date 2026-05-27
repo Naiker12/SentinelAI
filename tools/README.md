@@ -17,11 +17,14 @@ Controles:
 Con `Listen for test event` activo en n8n:
 
 ```powershell
-python tools/test_n8n_webhook.py --payload n8n/test_payload_knife.json
+python tools/test_n8n_webhook.py --payload ruta\al\payload_analizado.json
 ```
 
 Con el workflow activo:
 
 ```powershell
-python tools/test_n8n_webhook.py --url http://localhost:5678/webhook/sentinel-analysis --payload n8n/test_payload_normal.json
+python tools/test_n8n_webhook.py --url http://localhost:5678/webhook/sentinel-analysis --payload ruta\al\payload_analizado.json
 ```
+
+El payload debe venir enriquecido por `agente_analisis.risk_engine` con
+`resultado` y `decision`. Los eventos crudos se rechazan por diseno.

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import os
-import random
-from datetime import datetime, timedelta
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -12,25 +10,11 @@ load_dotenv()
 
 
 LEVEL_ORDER = ["BAJO", "MEDIO", "ALTO", "CRITICO"]
-OBJECTS = ["persona", "persona_sospechosa", "multitud", "arma", "arma_blanca", "fusil", "no_violencia", "violencia"]
-CAMERAS = ["PC-01", "CAM-02", "CAM-03", "CAM-04"]
-ZONES = ["Entrada principal", "Pasillo central", "Patio trasero", "Estacionamiento"]
 ACTIONS = {
     "BAJO": "REGISTRAR_EVENTO",
     "MEDIO": "MONITOREAR",
     "ALTO": "ENVIAR_ALERTA",
     "CRITICO": "ALERTA_CRITICA",
-}
-RISK_BASE = {
-    "arma": 0.88,
-    "arma_blanca": 0.75,
-    "fusil": 0.97,
-    "multitud": 0.45,
-    "no_violencia": 0.05,
-    "persona": 0.20,
-    "persona_sospechosa": 0.55,
-    "violencia": 0.85,
-    "cell_phone": 0.15,
 }
 OBJECT_LABELS = {
     "arma": "Arma",
@@ -87,79 +71,6 @@ def score_from_level(level: str) -> float:
         "ALTO": 0.70,
         "CRITICO": 0.90,
     }.get(str(level).upper(), 0.20)
-
-
-def generate_events(count: int = 300) -> pd.DataFrame:
-    random.seed(42)
-    now = datetime.now()
-    rows: list[dict] = []
-    tracking_ids: dict[str, list[str]] = {}
-
-    for _ in range(count):
-        timestamp = now - timedelta(hours=random.expovariate(0.15))
-        obj = random.choices(OBJECTS, weights=[35, 10, 8, 5, 8, 2, 20, 12])[0]
-        camera_index = random.randint(0, len(CAMERAS) - 1)
-        camera = CAMERAS[camera_index]
-        zone = ZONES[camera_index]
-        confidence = round(random.uniform(0.50, 0.99), 2)
-        hour = timestamp.hour
-
-        score = RISK_BASE[obj] + (confidence - 0.5) * 0.3
-        if 0 <= hour < 6:
-            score += 0.20
-        score += random.uniform(-0.05, 0.05)
-        score = round(min(max(score, 0.0), 1.0), 2)
-        level = level_from_score(score)
-
-        tracking_ids.setdefault(camera, [])
-        if obj in {"persona", "persona_sospechosa"}:
-            if not tracking_ids[camera] or random.random() < 0.3:
-                track_id = f"T{random.randint(100, 999)}"
-                tracking_ids[camera].append(track_id)
-                tracking_ids[camera] = tracking_ids[camera][-5:]
-            else:
-                track_id = random.choice(tracking_ids[camera])
-            permanence = round(random.uniform(0.5, 45.0), 1)
-        else:
-            track_id = None
-            permanence = None
-        speed = round(random.uniform(0, 12), 2) if track_id else 0.0
-        erratic = bool(track_id and random.random() < 0.12)
-
-        rows.append(
-            {
-                "timestamp": timestamp,
-                "camara_id": camera,
-                "zona": zone,
-                "objeto": obj,
-                "confianza": confidence,
-                "score_riesgo": score,
-                "nivel_riesgo": level,
-                "accion_tomada": ACTIONS[level],
-                "objeto_nombre": OBJECT_LABELS.get(obj, obj),
-                "accion_nombre": ACTION_LABELS[ACTIONS[level]],
-                "nivel_nombre": LEVEL_LABELS[level],
-                "track_id": track_id,
-                "permanencia_s": permanence,
-                "velocidad": speed,
-                "movimiento_erratico": erratic,
-                "eventos_previos_24h": random.randint(0, 20),
-                "resumen_ia": (
-                    "Objeto peligroso con contexto de seguimiento."
-                    if level in {"ALTO", "CRITICO"}
-                    else ""
-                ),
-                "factores_ia": [],
-                "requiere_revision_humana": level in {"MEDIO", "ALTO", "CRITICO"},
-                "estado_revision_humana": "PENDIENTE" if level in {"MEDIO", "ALTO", "CRITICO"} else "NO_REQUERIDA",
-                "automatizacion_bloqueada": level in {"MEDIO", "ALTO", "CRITICO"},
-                "review_id": f"{camera}_{obj}_{int(timestamp.timestamp())}",
-                "hora": hour,
-                "dia_semana": timestamp.strftime("%A"),
-            }
-        )
-
-    return pd.DataFrame(rows).sort_values("timestamp", ascending=False).reset_index(drop=True)
 
 
 def normalize_supabase_events(rows: list[dict]) -> pd.DataFrame:
@@ -298,7 +209,7 @@ def load_events(limit: int = 500) -> tuple[pd.DataFrame, str]:
     supabase_url = os.getenv("SUPABASE_URL", "").strip()
     supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     if not supabase_url or not supabase_key:
-        return generate_events(300), "Datos simulados"
+        return pd.DataFrame(columns=dashboard_columns()), "Sin datos reales: faltan credenciales Supabase"
 
     try:
         from supabase import create_client
@@ -313,4 +224,4 @@ def load_events(limit: int = 500) -> tuple[pd.DataFrame, str]:
         )
         return normalize_supabase_events(response.data or []), "Supabase real"
     except Exception as exc:
-        return generate_events(300), f"Datos simulados: {exc}"
+        return pd.DataFrame(columns=dashboard_columns()), f"Sin datos reales: {exc}"

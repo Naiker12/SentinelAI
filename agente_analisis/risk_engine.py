@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime
 
 from agente_analisis.schemas import (
     ActionDecision,
@@ -121,9 +122,10 @@ def calculate_risk_score(request: AnalysisRequest) -> tuple[int, list[RiskFactor
 
 def knn_risk_score(request: AnalysisRequest, k: int = KNN_K) -> int:
     features = _knn_features(request)
+    prototypes = [*KNN_PROTOTYPES, *_historical_knn_prototypes(request)]
     distances = [
         (_euclidean_distance(features, prototype_features), score)
-        for prototype_features, score in KNN_PROTOTYPES
+        for prototype_features, score in prototypes
     ]
     distances.sort(key=lambda item: item[0])
     nearest = distances[: max(1, k)]
@@ -136,11 +138,54 @@ def knn_risk_score(request: AnalysisRequest, k: int = KNN_K) -> int:
     return round(weighted_total / weight_sum)
 
 
+def _historical_knn_prototypes(request: AnalysisRequest) -> list[tuple[list[float], int]]:
+    prototypes: list[tuple[list[float], int]] = []
+    for sample in request.memoria.knn_samples[:200]:
+        if not isinstance(sample, dict):
+            continue
+        score = _number(sample.get("score"))
+        if score is None:
+            continue
+        features = _knn_features_from_values(
+            objeto=sample.get("objeto"),
+            confianza=sample.get("confianza"),
+            hora=sample.get("hora"),
+            contexto=sample.get("contexto") if isinstance(sample.get("contexto"), dict) else {},
+            tracking=sample.get("tracking") if isinstance(sample.get("tracking"), dict) else {},
+            memoria=sample.get("memoria") if isinstance(sample.get("memoria"), dict) else {},
+        )
+        prototypes.append((features, round(_clamp(score, 0, 100))))
+    return prototypes
+
+
 def _knn_features(request: AnalysisRequest) -> list[float]:
-    objeto = normalize_label(request.evento.objeto)
-    context = request.contexto
-    tracking = request.tracking
-    memory = request.memoria
+    return _knn_features_from_values(
+        objeto=request.evento.objeto,
+        confianza=request.evento.confianza,
+        hora=request.evento.hora,
+        contexto=request.contexto.model_dump(),
+        tracking=request.tracking.model_dump(),
+        memoria=request.memoria.model_dump(),
+    )
+
+
+def _knn_features_from_values(
+    objeto,
+    confianza,
+    hora,
+    contexto: dict,
+    tracking: dict,
+    memoria: dict,
+) -> list[float]:
+    objeto = normalize_label(objeto)
+    hour = _hour_from_value(hora)
+    illumination = normalize_label(contexto.get("iluminacion"))
+    people_count = _number(contexto.get("cantidad_personas")) or 0
+    previous_alerts = _number(memoria.get("alertas_previas_24h")) or 0
+    previous_events = _number(memoria.get("eventos_previos_24h")) or 0
+    speed = _number(tracking.get("velocidad")) or 0
+    permanence = _number(tracking.get("permanencia_segundos")) or 0
+    erratic = bool(tracking.get("movimiento_erratico"))
     danger = {
         "fusil": 1.0,
         "arma": 0.9,
@@ -153,15 +198,15 @@ def _knn_features(request: AnalysisRequest) -> list[float]:
     }.get(objeto, 0.1)
     return [
         danger,
-        _clamp(request.evento.confianza, 0, 1),
-        1.0 if is_night(request.evento.hora.hour) else 0.0,
-        1.0 if normalize_label(context.iluminacion) in {"baja", "oscura", "low", "dark"} else 0.0,
-        _clamp(memory.alertas_previas_24h / 5, 0, 1),
-        _clamp(memory.eventos_previos_24h / 20, 0, 1),
-        _clamp(context.cantidad_personas / 5, 0, 1),
-        _clamp(tracking.velocidad / 12, 0, 1),
-        _clamp(tracking.permanencia_segundos / 900, 0, 1),
-        1.0 if tracking.movimiento_erratico else 0.0,
+        _clamp(_number(confianza) or 0, 0, 1),
+        1.0 if is_night(hour) else 0.0,
+        1.0 if illumination in {"baja", "oscura", "low", "dark"} else 0.0,
+        _clamp(previous_alerts / 5, 0, 1),
+        _clamp(previous_events / 20, 0, 1),
+        _clamp(people_count / 5, 0, 1),
+        _clamp(speed / 80, 0, 1),
+        _clamp(permanence / 900, 0, 1),
+        1.0 if erratic else 0.0,
     ]
 
 
@@ -171,6 +216,25 @@ def _euclidean_distance(left: list[float], right: list[float]) -> float:
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
+
+
+def _number(value) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def _hour_from_value(value) -> int:
+    if isinstance(value, datetime):
+        return value.hour
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).hour
+        except ValueError:
+            return 12
+    return 12
 
 
 def decide_action(score: int, risk_level: str, confidence: float) -> ActionDecision:

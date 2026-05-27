@@ -42,7 +42,7 @@ class TelegramSupervisorClient:
                     if callback:
                         self._handle_callback(callback)
             except requests.RequestException as exc:
-                print(f"Telegram callback polling no disponible: {exc}")
+                print(f"Telegram callback polling no disponible: {exc}{_callback_polling_hint(exc)}")
                 stop_event.wait(interval_seconds)
             stop_event.wait(interval_seconds)
 
@@ -303,3 +303,15 @@ def _final_instruction_for(action: str) -> str:
     if action == "review":
         return "La camara enviara una nueva captura para analizar mejor la escena."
     return "Revisar manualmente."
+
+
+def _callback_polling_hint(exc: requests.RequestException) -> str:
+    response = getattr(exc, "response", None)
+    text = getattr(response, "text", "") or str(exc)
+    if "webhook" in text.lower() and "getupdates" in text.lower():
+        return (
+            " El bot tiene un webhook activo, normalmente por Telegram Trigger de n8n. "
+            "Usa solo una ruta: desactiva el trigger de n8n para polling Python, "
+            "o deja n8n activo y desactiva SENTINEL_TELEGRAM_CALLBACK_POLLING."
+        )
+    return ""
