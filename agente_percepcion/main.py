@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import cv2
@@ -11,6 +12,7 @@ from agente_percepcion.config import get_settings
 from agente_percepcion.detector import YoloDetector, draw_detections
 from agente_percepcion.events import DetectionEvent, N8nClient, SupabaseEventStore
 from agente_percepcion.memory import EventMemory, should_emit_detection
+from agente_percepcion.telegram import TelegramSupervisorClient, mark_telegram_evidence
 
 
 def run() -> None:
@@ -23,7 +25,11 @@ def run() -> None:
         settings.supabase_service_role_key,
         settings.supabase_detection_events_table,
     )
-    n8n = N8nClient(settings.n8n_webhook_url)
+    n8n = N8nClient(
+        settings.n8n_webhook_url,
+        allow_test_webhook=settings.allow_n8n_test_webhook,
+    )
+    telegram = TelegramSupervisorClient(settings.telegram_bot_token, settings.telegram_chat_id)
     memory = EventMemory()
     last_event_at: dict[str, float] = {}
 
@@ -41,6 +47,7 @@ def run() -> None:
         while True:
             frame = camera.read()
             detections = detector.detect(frame)
+            annotated_frame = draw_detections(frame.copy(), detections)
             now = time.monotonic()
 
             for detection in detections:
@@ -50,10 +57,15 @@ def run() -> None:
                     last_event_at,
                     now,
                     settings.event_cooldown_seconds,
+                    detection.box,
                 ):
                     continue
 
-                image_path = _save_frame(settings.image_dir, frame) if settings.save_images else None
+                image_path = (
+                    _save_frame(settings.image_dir, annotated_frame)
+                    if settings.save_images
+                    else None
+                )
                 memory_snapshot = memory.snapshot(now)
                 event = DetectionEvent.from_detection(
                     detection,
@@ -70,13 +82,17 @@ def run() -> None:
                     memoria=memory_snapshot,
                 )
                 analysis = analyze_event(event.to_analysis_request())
+                if analysis.decision.requires_human_review and not event.imagen:
+                    event = replace(event, imagen=_save_frame(settings.image_dir, annotated_frame))
+                    analysis = analyze_event(event.to_analysis_request())
                 event = event.with_analysis(analysis)
+                _send_to_telegram(settings, telegram, event)
                 n8n_result = _send_to_n8n(n8n, event)
                 store.save(event, n8n_result.response or event.analisis)
                 memory.remember(now, analysis.result.risk_level)
                 print(event.to_payload())
 
-            cv2.imshow("SentinelAI - AgentePercepcion", draw_detections(frame, detections))
+            cv2.imshow("SentinelAI - AgentePercepcion", annotated_frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
@@ -85,7 +101,7 @@ def run() -> None:
 
 def _save_frame(image_dir: Path, frame) -> str:
     image_dir.mkdir(parents=True, exist_ok=True)
-    path = image_dir / f"evento_{int(time.time() * 1000)}.jpg"
+    path = image_dir / f"evento_{time.time_ns()}.jpg"
     cv2.imwrite(str(path), frame)
     return str(path)
 
@@ -98,6 +114,23 @@ def _send_to_n8n(n8n: N8nClient, event: DetectionEvent):
 
     print(f"n8n respondio ({result.status_code}): {result.response}")
     return result
+
+
+def _send_to_telegram(settings, telegram: TelegramSupervisorClient, event: DetectionEvent) -> None:
+    if not settings.telegram_direct_alerts:
+        return
+    if not event.analisis:
+        return
+    decision = event.analisis.get("decision", {})
+    if not decision.get("requiere_revision_humana"):
+        return
+
+    result = telegram.send_validation(event)
+    mark_telegram_evidence(event, result.sent, result.error)
+    if result.sent:
+        print("Telegram recibio evidencia visual para revision humana.")
+    else:
+        print(f"Telegram no recibio evidencia visual: {result.error}")
 
 
 if __name__ == "__main__":

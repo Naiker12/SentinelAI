@@ -53,6 +53,10 @@ class Settings:
     supabase_service_role_key: str | None
     supabase_detection_events_table: str
     n8n_webhook_url: str | None
+    allow_n8n_test_webhook: bool
+    telegram_bot_token: str | None
+    telegram_chat_id: str | None
+    telegram_direct_alerts: bool
     save_images: bool
     image_dir: Path
 
@@ -80,6 +84,16 @@ def get_settings() -> Settings:
             "SUPABASE_DETECTION_EVENTS_TABLE", "detection_events"
         ),
         n8n_webhook_url=webhook or None,
+        allow_n8n_test_webhook=_as_bool(
+            os.getenv("SENTINEL_ALLOW_N8N_TEST_WEBHOOK"),
+            default=False,
+        ),
+        telegram_bot_token=os.getenv("SENTINEL_TELEGRAM_BOT_TOKEN", "").strip() or None,
+        telegram_chat_id=os.getenv("SENTINEL_TELEGRAM_CHAT_ID", "").strip() or None,
+        telegram_direct_alerts=_as_bool(
+            os.getenv("SENTINEL_TELEGRAM_DIRECT_ALERTS"),
+            default=True,
+        ),
         save_images=_as_bool(os.getenv("SENTINEL_SAVE_IMAGES"), default=False),
         image_dir=Path(os.getenv("SENTINEL_IMAGE_DIR", "capturas")),
     )

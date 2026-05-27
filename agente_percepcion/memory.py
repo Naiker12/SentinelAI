@@ -32,8 +32,9 @@ def should_emit_detection(
     last_event_at: dict[str, float],
     now: float,
     cooldown_seconds: float,
+    box: tuple[int, int, int, int] | None = None,
 ) -> bool:
-    key = f"{camera_name}:{label.strip().lower().replace(' ', '_')}"
+    key = _event_key(label, camera_name, box)
     if key not in last_event_at:
         last_event_at[key] = now
         return True
@@ -43,3 +44,16 @@ def should_emit_detection(
         last_event_at[key] = now
         return True
     return False
+
+
+def _event_key(label: str, camera_name: str, box: tuple[int, int, int, int] | None = None) -> str:
+    normalized_label = label.strip().lower().replace(" ", "_")
+    if box is None:
+        return f"{camera_name}:{normalized_label}"
+
+    x1, y1, x2, y2 = box
+    center_x = round(((x1 + x2) / 2) / 80)
+    center_y = round(((y1 + y2) / 2) / 80)
+    width = round((x2 - x1) / 80)
+    height = round((y2 - y1) / 80)
+    return f"{camera_name}:{normalized_label}:r{center_x}_{center_y}_{width}_{height}"

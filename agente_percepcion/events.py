@@ -161,14 +161,20 @@ class N8nResult:
 
 
 class N8nClient:
-    def __init__(self, webhook_url: str | None, timeout_seconds: float = 5) -> None:
+    def __init__(
+        self,
+        webhook_url: str | None,
+        timeout_seconds: float = 5,
+        allow_test_webhook: bool = False,
+    ) -> None:
         self.webhook_url = webhook_url
         self.timeout_seconds = timeout_seconds
+        self.allow_test_webhook = allow_test_webhook
 
     def send(self, event: DetectionEvent) -> N8nResult:
         if not self.webhook_url:
             return N8nResult(sent=False, error="SENTINEL_N8N_WEBHOOK_URL no esta configurado.")
-        if "/webhook-test/" in self.webhook_url:
+        if "/webhook-test/" in self.webhook_url and not self.allow_test_webhook:
             return N8nResult(
                 sent=False,
                 error=(

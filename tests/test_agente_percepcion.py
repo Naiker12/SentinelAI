@@ -115,6 +115,25 @@ def test_n8n_rejects_test_webhook_for_camera_flow() -> None:
     assert "/webhook/sentinel-analysis" in result.error
 
 
+def test_n8n_can_allow_test_webhook_for_manual_workflow_debug() -> None:
+    event = DetectionEvent(
+        objeto="person",
+        confianza=0.91,
+        hora="2026-05-26T00:00:00+00:00",
+        camara="PC-01",
+        riesgo="bajo",
+        box=(10, 20, 200, 300),
+    )
+
+    client = N8nClient(
+        "http://localhost:5678/webhook-test/sentinel-analysis",
+        allow_test_webhook=True,
+    )
+
+    assert client.webhook_url.endswith("/webhook-test/sentinel-analysis")
+    assert client.allow_test_webhook is True
+
+
 def test_detection_event_includes_analysis_context() -> None:
     detection = Detection(label="knife", confidence=0.91, box=(10, 20, 200, 300))
 
@@ -176,6 +195,14 @@ def test_event_gate_uses_label_and_camera_cooldown() -> None:
     assert should_emit_detection("person", "PC-01", last_event_at, 7.0, 5)
 
 
+def test_event_gate_allows_same_label_in_different_frame_regions() -> None:
+    last_event_at: dict[str, float] = {}
+
+    assert should_emit_detection("violence", "PC-01", last_event_at, 1.0, 5, (10, 10, 120, 120))
+    assert should_emit_detection("violence", "PC-01", last_event_at, 1.1, 5, (360, 10, 500, 120))
+    assert not should_emit_detection("violence", "PC-01", last_event_at, 1.2, 5, (15, 15, 125, 125))
+
+
 def test_draw_detections_adds_bounding_box() -> None:
     frame = np.zeros((120, 160, 3), dtype=np.uint8)
     detection = Detection(label="person", confidence=0.91, box=(20, 30, 100, 90))
@@ -184,3 +211,12 @@ def test_draw_detections_adds_bounding_box() -> None:
 
     assert output.sum() > 0
     assert output[30, 20].sum() > 0
+
+
+def test_draw_detections_marks_violence_as_high_risk_color() -> None:
+    frame = np.zeros((120, 160, 3), dtype=np.uint8)
+    detection = Detection(label="violence", confidence=0.91, box=(20, 30, 100, 90))
+
+    output = draw_detections(frame.copy(), [detection])
+
+    assert output[30, 20, 2] > output[30, 20, 1]

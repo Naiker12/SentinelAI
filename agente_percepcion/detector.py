@@ -92,7 +92,7 @@ def _draw_label(frame: MatLike, text: str, x: int, y: int, color: tuple[int, int
 
 def _color_for_label(label: str) -> tuple[int, int, int]:
     normalized = normalize_label(label)
-    high_risk = {"knife", "gun", "scissors"}
+    high_risk = {"knife", "gun", "scissors", "violence"}
     medium_risk = {"person", "car", "truck", "backpack", "cell phone"}
 
     if normalized in high_risk:
