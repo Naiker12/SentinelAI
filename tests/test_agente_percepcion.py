@@ -11,6 +11,7 @@ from agente_percepcion.telegram import TelegramSupervisorClient
 from agente_percepcion.memory import should_emit_detection
 from agente_analisis.risk_engine import analyze_event
 from agente_percepcion.main import _is_alertable_detection, _stabilize_danger_detections
+from agente_percepcion.tracking import MotionTracker
 
 
 def test_detection_event_maps_to_supabase_row() -> None:
@@ -217,6 +218,21 @@ def test_detection_event_includes_analysis_context() -> None:
     assert payload["memoria"]["alertas_previas_24h"] == 1
 
 
+def test_motion_tracker_adds_track_id_and_velocity() -> None:
+    tracker = MotionTracker()
+    first = Detection(label="arma", confidence=0.8, box=(10, 10, 60, 60))
+    second = Detection(label="arma", confidence=0.82, box=(40, 10, 90, 60))
+
+    tracked_first = tracker.update([first], 10.0)[0]
+    tracked_second = tracker.update([second], 11.0)[0]
+
+    assert tracked_first.tracking is not None
+    assert tracked_second.tracking is not None
+    assert tracked_second.tracking["track_id"] == tracked_first.tracking["track_id"]
+    assert tracked_second.tracking["velocidad"] > 0
+    assert tracked_second.tracking["patron_movimiento"] == "en_movimiento"
+
+
 def test_detection_event_can_emit_precomputed_analysis_payload() -> None:
     detection = Detection(label="pistol", confidence=0.94, box=(10, 20, 200, 300))
     event = DetectionEvent.from_detection(
@@ -285,6 +301,27 @@ def test_telegram_validation_sends_public_image_url(monkeypatch) -> None:
     assert result.sent is True
     assert calls[0][0].endswith("/sendPhoto")
     assert calls[0][1]["json"]["photo"].startswith("https://example.supabase.co")
+
+
+def test_telegram_callback_sends_visible_followup_and_queues_review(monkeypatch) -> None:
+    calls = []
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+    def fake_post(url, **kwargs):
+        calls.append((url, kwargs))
+        return Response()
+
+    monkeypatch.setattr("agente_percepcion.telegram.requests.post", fake_post)
+    client = TelegramSupervisorClient("token", "123")
+
+    client._handle_callback({"id": "cb1", "data": "sentinel:review:rev_123"})
+
+    assert any(call[0].endswith("/answerCallbackQuery") for call in calls)
+    assert any(call[0].endswith("/sendMessage") for call in calls)
+    assert client.consume_review_snapshot_requests() == ["rev_123"]
 
 
 def test_event_gate_uses_label_and_camera_cooldown() -> None:

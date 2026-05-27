@@ -21,6 +21,7 @@ from agente_percepcion.events import (
 )
 from agente_percepcion.memory import EventMemory, should_emit_detection
 from agente_percepcion.telegram import TelegramSupervisorClient, mark_telegram_evidence
+from agente_percepcion.tracking import MotionTracker
 
 
 def run() -> None:
@@ -50,6 +51,7 @@ def run() -> None:
     )
     telegram = TelegramSupervisorClient(settings.telegram_bot_token, settings.telegram_chat_id)
     memory = EventMemory()
+    motion_tracker = MotionTracker(max_lost_seconds=settings.danger_hold_seconds + 1)
     memory_lock = threading.Lock()
     last_event_at: dict[str, float] = {}
     last_danger: tuple[float, Detection] | None = None
@@ -83,15 +85,23 @@ def run() -> None:
     ) as camera:
         while True:
             frame = camera.read()
+            now = time.monotonic()
             detections = detector.detect(frame)
+            detections = motion_tracker.update(detections, now)
             detections, last_danger = _stabilize_danger_detections(
                 detections,
                 last_danger,
-                time.monotonic(),
+                now,
                 settings.danger_hold_seconds,
             )
             annotated_frame = draw_detections(frame.copy(), detections)
-            now = time.monotonic()
+            for review_id in telegram.consume_review_snapshot_requests():
+                image_path = _save_frame(settings.image_dir, annotated_frame)
+                result = telegram.send_review_snapshot(review_id, image_path)
+                if result.sent:
+                    print(f"Telegram recibio captura adicional para revision: {review_id}")
+                else:
+                    print(f"No se pudo enviar captura adicional: {result.error}")
 
             for detection in detections:
                 if not _is_alertable_detection(detection.label):
@@ -125,7 +135,7 @@ def run() -> None:
                             1 for item in detections if item.label == "persona"
                         ),
                     },
-                    tracking=None,
+                    tracking=detection.tracking,
                     memoria=memory_snapshot,
                 )
                 analysis = analyze_event(event.to_analysis_request())

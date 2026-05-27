@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from threading import Event
+from threading import Event, Lock
 
 import requests
 
@@ -25,6 +25,8 @@ class TelegramSupervisorClient:
         self.bot_token = bot_token
         self.chat_id = chat_id
         self.timeout_seconds = timeout_seconds
+        self._review_snapshot_requests: list[str] = []
+        self._review_snapshot_lock = Lock()
 
     def poll_supervisor_callbacks(self, stop_event: Event, interval_seconds: float = 2) -> None:
         if not self.bot_token:
@@ -64,13 +66,35 @@ class TelegramSupervisorClient:
         action = parts[1]
         review_id = parts[2]
         labels = {
-            "confirm": ("CONFIRMADA", "Amenaza confirmada"),
-            "false": ("FALSO_POSITIVO", "Marcado como falso positivo"),
-            "review": ("REQUIERE_MAS_REVISION", "Marcado para mas revision"),
+            "confirm": ("CONFIRMADA", "Amenaza confirmada", "ALERTA ACTIVADA"),
+            "false": ("FALSO_POSITIVO", "Marcado como falso positivo", "EVENTO CERRADO"),
+            "review": ("REQUIERE_MAS_REVISION", "Solicitando nueva captura", "REVISION ADICIONAL"),
         }
-        status, text = labels.get(action, ("DESCONOCIDA", "Respuesta recibida"))
+        status, text, title = labels.get(action, ("DESCONOCIDA", "Respuesta recibida", "RESPUESTA"))
         self._answer_callback(callback.get("id"), text)
+        if action == "review":
+            self._queue_review_snapshot(review_id)
+        self._send_plain_message(
+            "\n".join(
+                [
+                    f"<b>SentinelAI - {title}</b>",
+                    f"Revision: {_escape_html(review_id)}",
+                    f"Estado: {_escape_html(status)}",
+                    _final_instruction_for(action),
+                ]
+            )
+        )
         print(f"Supervisor Telegram: {review_id} -> {status}")
+
+    def consume_review_snapshot_requests(self) -> list[str]:
+        with self._review_snapshot_lock:
+            requests_to_send = self._review_snapshot_requests[:]
+            self._review_snapshot_requests.clear()
+        return requests_to_send
+
+    def _queue_review_snapshot(self, review_id: str) -> None:
+        with self._review_snapshot_lock:
+            self._review_snapshot_requests.append(review_id)
 
     def _answer_callback(self, callback_id: str | None, text: str) -> None:
         if not callback_id:
@@ -114,19 +138,21 @@ class TelegramSupervisorClient:
         self,
         image_path: Path,
         caption: str,
-        reply_markup: dict,
+        reply_markup: dict | None,
     ) -> TelegramSendResult:
         url = f"https://api.telegram.org/bot{self.bot_token}/sendPhoto"
         try:
+            data = {
+                "chat_id": self.chat_id,
+                "caption": caption,
+                "parse_mode": "HTML",
+            }
+            if reply_markup:
+                data["reply_markup"] = _json_dumps(reply_markup)
             with image_path.open("rb") as image_file:
                 response = requests.post(
                     url,
-                    data={
-                        "chat_id": self.chat_id,
-                        "caption": caption,
-                        "parse_mode": "HTML",
-                        "reply_markup": _json_dumps(reply_markup),
-                    },
+                    data=data,
                     files={"photo": image_file},
                     timeout=self.timeout_seconds,
                 )
@@ -176,6 +202,38 @@ class TelegramSupervisorClient:
             return TelegramSendResult(sent=True)
         except requests.RequestException as exc:
             return TelegramSendResult(sent=False, error=str(exc))
+
+    def _send_plain_message(self, text: str) -> TelegramSendResult:
+        if not self.bot_token or not self.chat_id:
+            return TelegramSendResult(sent=False, error="Telegram no esta configurado.")
+        url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
+        try:
+            response = requests.post(
+                url,
+                json={
+                    "chat_id": self.chat_id,
+                    "text": text,
+                    "parse_mode": "HTML",
+                },
+                timeout=self.timeout_seconds,
+            )
+            response.raise_for_status()
+            return TelegramSendResult(sent=True)
+        except requests.RequestException as exc:
+            return TelegramSendResult(sent=False, error=str(exc))
+
+    def send_review_snapshot(self, review_id: str, image_path: str | Path) -> TelegramSendResult:
+        caption = "\n".join(
+            [
+                "<b>SentinelAI - Captura adicional</b>",
+                f"Revision: {_escape_html(review_id)}",
+                "Esta imagen corresponde a la solicitud de Mas revision.",
+            ]
+        )
+        path = Path(image_path)
+        if path.exists():
+            return self._send_photo(path, caption, None)
+        return TelegramSendResult(sent=False, error=f"No existe la captura: {path}")
 
 
 def mark_telegram_evidence(event: DetectionEvent, sent: bool, error: str | None = None) -> None:
@@ -235,3 +293,13 @@ def _json_dumps(value: dict) -> str:
     import json
 
     return json.dumps(value, ensure_ascii=False)
+
+
+def _final_instruction_for(action: str) -> str:
+    if action == "confirm":
+        return "Se debe activar el protocolo definido para amenaza real."
+    if action == "false":
+        return "Se marca como falso positivo y queda listo para entrenamiento."
+    if action == "review":
+        return "La camara enviara una nueva captura para analizar mejor la escena."
+    return "Revisar manualmente."

@@ -26,6 +26,7 @@ def test_agente_analisis_workflow_has_core_nodes() -> None:
     assert "Telegram Trigger - Callback Supervisor" in node_names
     assert "Webhook - Callback Telegram Supervisor" in node_names
     assert "AgenteInterfazHumana - Procesar Callback" in node_names
+    assert "Telegram Supervisor - Responder Callback" in node_names
     assert "Responder Callback Telegram" in node_names
     assert "Responder a AgentePercepcion" in node_names
 
@@ -66,6 +67,10 @@ def test_agente_analisis_workflow_connections_are_complete() -> None:
     assert (
         connections["AgenteInterfazHumana - Procesar Callback"]["main"][0][0]["node"]
         == "Responder Callback Telegram"
+    )
+    assert (
+        connections["AgenteInterfazHumana - Procesar Callback"]["main"][0][1]["node"]
+        == "Telegram Supervisor - Responder Callback"
     )
 
 
@@ -201,6 +206,8 @@ def test_n8n_ia_code_snippets_are_present() -> None:
     assert "review_id" in telegram.read_text(encoding="utf-8")
     assert "human_label" in supervisor.read_text(encoding="utf-8")
     assert "answer_callback_query" in supervisor.read_text(encoding="utf-8")
+    assert "telegram_followup" in supervisor.read_text(encoding="utf-8")
+    assert "request_new_capture" in supervisor.read_text(encoding="utf-8")
     assert "Alerta_Final_Telegram" in guide.read_text(encoding="utf-8")
     assert "Supervisor Humano" in guide.read_text(encoding="utf-8")
     assert "Responde solo JSON valido" in prompt.read_text(encoding="utf-8")

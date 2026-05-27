@@ -13,6 +13,7 @@ class Detection:
     label: str
     confidence: float
     box: tuple[int, int, int, int]
+    tracking: dict | None = None
 
 
 class YoloDetector:

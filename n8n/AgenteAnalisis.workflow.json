@@ -207,7 +207,7 @@
         420
       ],
       "parameters": {
-        "jsCode": "const payload = $json.body ?? $json;\nconst callback = payload.callback_query ?? payload.callback ?? {};\nconst callbackData = String(callback.data ?? payload.callback_data ?? \"\");\nconst parts = callbackData.split(\":\");\n\nconst actionMap = {\n  confirm: {\n    human_label: \"real_threat\",\n    estado_revision_humana: \"CONFIRMADA\",\n    accion_final: \"ACTIVAR_PROTOCOLO\",\n    alimentar_entrenamiento: true,\n  },\n  false: {\n    human_label: \"false_positive\",\n    estado_revision_humana: \"FALSO_POSITIVO\",\n    accion_final: \"CERRAR_EVENTO\",\n    alimentar_entrenamiento: true,\n  },\n  review: {\n    human_label: \"needs_more_review\",\n    estado_revision_humana: \"REQUIERE_MAS_REVISION\",\n    accion_final: \"SOLICITAR_MAS_CONTEXTO\",\n    alimentar_entrenamiento: false,\n  },\n};\n\nconst actionKey = parts[0] === \"sentinel\" ? parts[1] ?? \"\" : \"\";\nconst reviewId = parts[0] === \"sentinel\" ? parts[2] ?? \"\" : payload.review_id ?? \"\";\nconst trackingId = payload.tracking_id ?? \"\";\nconst selected = actionMap[actionKey] ?? {\n  human_label: \"unknown\",\n  estado_revision_humana: \"DESCONOCIDA\",\n  accion_final: \"REVISAR_MANUALMENTE\",\n  alimentar_entrenamiento: false,\n};\n\nreturn [\n  {\n    json: {\n      source: \"telegram_supervisor\",\n      callback_data: callbackData,\n      review_id: reviewId,\n      tracking_id: trackingId,\n      answer_callback_query: {\n        callback_query_id: callback.id ?? payload.callback_query_id ?? null,\n        text: `SentinelAI: ${selected.estado_revision_humana}`,\n        show_alert: false,\n      },\n      supervisor: {\n        user_id: callback.from?.id ?? payload.user_id ?? null,\n        username: callback.from?.username ?? payload.username ?? null,\n        decided_at: new Date().toISOString(),\n        ...selected,\n      },\n      persistencia_feedback: {\n        review_id: reviewId,\n        tracking_id: trackingId,\n        camara_id: payload.camara_id ?? null,\n        detection_event_id: payload.detection_event_id ?? null,\n        human_label: selected.human_label,\n        estado_revision_humana: selected.estado_revision_humana,\n        accion_final: selected.accion_final,\n        supervisor_user_id: callback.from?.id ?? payload.user_id ?? null,\n        supervisor_username: callback.from?.username ?? payload.username ?? null,\n        alimentar_entrenamiento: selected.alimentar_entrenamiento,\n        raw_callback: callbackData,\n        decided_at: new Date().toISOString(),\n      },\n    },\n  },\n];\n"
+        "jsCode": "const payload = $json.body ?? $json;\nconst callback = payload.callback_query ?? payload.callback ?? {};\nconst callbackData = String(callback.data ?? payload.callback_data ?? \"\");\nconst parts = callbackData.split(\":\");\n\nconst actionMap = {\n  confirm: {\n    human_label: \"real_threat\",\n    estado_revision_humana: \"CONFIRMADA\",\n    accion_final: \"ACTIVAR_PROTOCOLO\",\n    alimentar_entrenamiento: true,\n    titulo: \"ALERTA ACTIVADA\",\n    detalle: \"Amenaza confirmada por supervisor. Activar protocolo operativo.\",\n  },\n  false: {\n    human_label: \"false_positive\",\n    estado_revision_humana: \"FALSO_POSITIVO\",\n    accion_final: \"CERRAR_EVENTO\",\n    alimentar_entrenamiento: true,\n    titulo: \"EVENTO CERRADO\",\n    detalle: \"Marcado como falso positivo. Guardar feedback para reentrenamiento.\",\n  },\n  review: {\n    human_label: \"needs_more_review\",\n    estado_revision_humana: \"REQUIERE_MAS_REVISION\",\n    accion_final: \"SOLICITAR_MAS_CONTEXTO\",\n    alimentar_entrenamiento: false,\n    titulo: \"REVISION ADICIONAL\",\n    detalle: \"Solicitar nueva captura o enviar el evento a un nodo IA para explicar la escena.\",\n  },\n};\n\nconst actionKey = parts[0] === \"sentinel\" ? parts[1] ?? \"\" : \"\";\nconst reviewId = parts[0] === \"sentinel\" ? parts[2] ?? \"\" : payload.review_id ?? \"\";\nconst trackingId = payload.tracking_id ?? \"\";\nconst selected = actionMap[actionKey] ?? {\n  human_label: \"unknown\",\n  estado_revision_humana: \"DESCONOCIDA\",\n  accion_final: \"REVISAR_MANUALMENTE\",\n  alimentar_entrenamiento: false,\n  titulo: \"RESPUESTA RECIBIDA\",\n  detalle: \"Accion no reconocida. Revisar manualmente.\",\n};\n\nreturn [\n  {\n    json: {\n      source: \"telegram_supervisor\",\n      callback_data: callbackData,\n      review_id: reviewId,\n      tracking_id: trackingId,\n      answer_callback_query: {\n        callback_query_id: callback.id ?? payload.callback_query_id ?? null,\n        text: `SentinelAI: ${selected.estado_revision_humana}`,\n        show_alert: false,\n      },\n      supervisor: {\n        user_id: callback.from?.id ?? payload.user_id ?? null,\n        username: callback.from?.username ?? payload.username ?? null,\n        decided_at: new Date().toISOString(),\n        ...selected,\n      },\n      telegram_followup: {\n        text: [\n          `<b>SentinelAI - ${selected.titulo}</b>`,\n          `Revision: ${reviewId || \"sin_evento\"}`,\n          `Estado: ${selected.estado_revision_humana}`,\n          selected.detalle,\n        ].join(\"\\n\"),\n        parse_mode: \"HTML\",\n        request_new_capture: actionKey === \"review\",\n        run_ai_review: actionKey === \"review\" || actionKey === \"confirm\",\n      },\n      persistencia_feedback: {\n        review_id: reviewId,\n        tracking_id: trackingId,\n        camara_id: payload.camara_id ?? null,\n        detection_event_id: payload.detection_event_id ?? null,\n        human_label: selected.human_label,\n        estado_revision_humana: selected.estado_revision_humana,\n        accion_final: selected.accion_final,\n        supervisor_user_id: callback.from?.id ?? payload.user_id ?? null,\n        supervisor_username: callback.from?.username ?? payload.username ?? null,\n        alimentar_entrenamiento: selected.alimentar_entrenamiento,\n        raw_callback: callbackData,\n        decided_at: new Date().toISOString(),\n      },\n    },\n  },\n];\n"
       }
     },
     {
@@ -279,6 +279,30 @@
         "height": 190,
         "color": 4,
         "content": "## Callback de validacion humana\n\nLa ruta recomendada es el **Telegram Trigger**, porque n8n registra el webhook del bot al activar el workflow.\n\nEl webhook `sentinel-telegram-callback` queda como respaldo/manual si decides configurar el webhook del bot por URL externa."
+      }
+    },
+    {
+      "id": "telegram-supervisor-responder-callback",
+      "name": "Telegram Supervisor - Responder Callback",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -420,
+        260
+      ],
+      "parameters": {
+        "chatId": "={{$env.SENTINEL_TELEGRAM_CHAT_ID}}",
+        "text": "={{$json.telegram_followup.text}}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "SentinelAI Telegram Bot"
+        }
       }
     }
   ],
@@ -378,6 +402,11 @@
         [
           {
             "node": "Responder Callback Telegram",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Telegram Supervisor - Responder Callback",
             "type": "main",
             "index": 0
           }
