@@ -52,6 +52,7 @@ def run() -> None:
     memory = EventMemory()
     memory_lock = threading.Lock()
     last_event_at: dict[str, float] = {}
+    last_danger: tuple[float, Detection] | None = None
     event_queue: queue.Queue[tuple[DetectionEvent, object, float] | None] = queue.Queue()
     worker = threading.Thread(
         target=_event_worker,
@@ -59,6 +60,15 @@ def run() -> None:
         daemon=True,
     )
     worker.start()
+    stop_telegram_callbacks = threading.Event()
+    telegram_callback_worker = None
+    if settings.telegram_callback_polling:
+        telegram_callback_worker = threading.Thread(
+            target=telegram.poll_supervisor_callbacks,
+            args=(stop_telegram_callbacks,),
+            daemon=True,
+        )
+        telegram_callback_worker.start()
 
     if settings.save_images:
         settings.image_dir.mkdir(parents=True, exist_ok=True)
@@ -74,10 +84,18 @@ def run() -> None:
         while True:
             frame = camera.read()
             detections = detector.detect(frame)
+            detections, last_danger = _stabilize_danger_detections(
+                detections,
+                last_danger,
+                time.monotonic(),
+                settings.danger_hold_seconds,
+            )
             annotated_frame = draw_detections(frame.copy(), detections)
             now = time.monotonic()
 
             for detection in detections:
+                if not _is_alertable_detection(detection.label):
+                    continue
                 cooldown = _cooldown_for_detection(settings, detection.label)
                 if not should_emit_detection(
                     detection.label,
@@ -121,6 +139,9 @@ def run() -> None:
 
     event_queue.put(None)
     worker.join(timeout=10)
+    stop_telegram_callbacks.set()
+    if telegram_callback_worker:
+        telegram_callback_worker.join(timeout=5)
     cv2.destroyAllWindows()
 
 
@@ -157,9 +178,35 @@ def _event_worker(
 
 
 def _cooldown_for_detection(settings, label: str) -> float:
-    if risk_for_label(label) == "alto":
+    if _is_alertable_detection(label):
         return settings.dangerous_event_cooldown_seconds
     return settings.event_cooldown_seconds
+
+
+def _is_alertable_detection(label: str) -> bool:
+    return risk_for_label(label) == "alto"
+
+
+def _stabilize_danger_detections(
+    detections: list[Detection],
+    last_danger: tuple[float, Detection] | None,
+    now: float,
+    hold_seconds: float,
+) -> tuple[list[Detection], tuple[float, Detection] | None]:
+    dangerous = [item for item in detections if risk_for_label(item.label) == "alto"]
+    if dangerous:
+        strongest = max(dangerous, key=lambda item: item.confidence)
+        return detections, (now, strongest)
+
+    if last_danger is None:
+        return detections, None
+
+    last_seen, detection = last_danger
+    if now - last_seen <= hold_seconds:
+        ghost = replace(detection, confidence=max(0.01, round(detection.confidence * 0.9, 4)))
+        return [*detections, ghost], last_danger
+
+    return detections, None
 
 
 def _save_frame(image_dir: Path, frame) -> str:

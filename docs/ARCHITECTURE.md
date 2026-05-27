@@ -41,7 +41,7 @@ AgentePercepcion
 
 AgenteAnalisis
   -> FastAPI /analyze
-  -> score matematico
+  -> score matematico + KNN local de apoyo
   -> decision de accion
 
 n8n
@@ -120,6 +120,10 @@ para orquestacion:
 
 Groq puede enriquecer `resultado.resumen_ia`, pero no debe reemplazar el score ni
 la decision final del motor de reglas.
+
+El KNN local compara el evento actual contra prototipos internos de bajo, medio,
+alto y critico usando distancia euclidiana. Solo ajusta el score como factor
+explicable; no reemplaza la deteccion YOLO ni la validacion humana.
 
 Salida:
 

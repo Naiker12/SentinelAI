@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Event
 
 import requests
 
@@ -24,6 +25,63 @@ class TelegramSupervisorClient:
         self.bot_token = bot_token
         self.chat_id = chat_id
         self.timeout_seconds = timeout_seconds
+
+    def poll_supervisor_callbacks(self, stop_event: Event, interval_seconds: float = 2) -> None:
+        if not self.bot_token:
+            return
+
+        offset = 0
+        while not stop_event.is_set():
+            try:
+                updates = self._get_updates(offset)
+                for update in updates:
+                    offset = max(offset, int(update.get("update_id", 0)) + 1)
+                    callback = update.get("callback_query")
+                    if callback:
+                        self._handle_callback(callback)
+            except requests.RequestException as exc:
+                print(f"Telegram callback polling no disponible: {exc}")
+                stop_event.wait(interval_seconds)
+            stop_event.wait(interval_seconds)
+
+    def _get_updates(self, offset: int) -> list[dict]:
+        url = f"https://api.telegram.org/bot{self.bot_token}/getUpdates"
+        response = requests.get(
+            url,
+            params={"offset": offset, "timeout": 1, "allowed_updates": '["callback_query"]'},
+            timeout=self.timeout_seconds,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        return list(payload.get("result") or [])
+
+    def _handle_callback(self, callback: dict) -> None:
+        callback_data = str(callback.get("data") or "")
+        parts = callback_data.split(":")
+        if len(parts) < 3 or parts[0] != "sentinel":
+            return
+
+        action = parts[1]
+        review_id = parts[2]
+        labels = {
+            "confirm": ("CONFIRMADA", "Amenaza confirmada"),
+            "false": ("FALSO_POSITIVO", "Marcado como falso positivo"),
+            "review": ("REQUIERE_MAS_REVISION", "Marcado para mas revision"),
+        }
+        status, text = labels.get(action, ("DESCONOCIDA", "Respuesta recibida"))
+        self._answer_callback(callback.get("id"), text)
+        print(f"Supervisor Telegram: {review_id} -> {status}")
+
+    def _answer_callback(self, callback_id: str | None, text: str) -> None:
+        if not callback_id:
+            return
+        url = f"https://api.telegram.org/bot{self.bot_token}/answerCallbackQuery"
+        response = requests.post(
+            url,
+            json={"callback_query_id": callback_id, "text": text, "show_alert": False},
+            timeout=self.timeout_seconds,
+        )
+        response.raise_for_status()
 
     def send_validation(self, event: DetectionEvent) -> TelegramSendResult:
         if not self.bot_token or not self.chat_id:

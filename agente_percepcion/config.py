@@ -50,6 +50,7 @@ class Settings:
     classes: set[str]
     event_cooldown_seconds: float
     dangerous_event_cooldown_seconds: float
+    danger_hold_seconds: float
     scene_zone: str
     scene_lighting: str
     supabase_url: str | None
@@ -62,6 +63,7 @@ class Settings:
     telegram_bot_token: str | None
     telegram_chat_id: str | None
     telegram_direct_alerts: bool
+    telegram_callback_polling: bool
     save_images: bool
     image_dir: Path
 
@@ -87,8 +89,9 @@ def get_settings() -> Settings:
         classes=_classes(os.getenv("SENTINEL_CLASSES", "persona")),
         event_cooldown_seconds=float(os.getenv("SENTINEL_EVENT_COOLDOWN_SECONDS", "5")),
         dangerous_event_cooldown_seconds=float(
-            os.getenv("SENTINEL_DANGEROUS_EVENT_COOLDOWN_SECONDS", "1")
+            os.getenv("SENTINEL_DANGEROUS_EVENT_COOLDOWN_SECONDS", "120")
         ),
+        danger_hold_seconds=float(os.getenv("SENTINEL_DANGER_HOLD_SECONDS", "2")),
         scene_zone=os.getenv("SENTINEL_SCENE_ZONE", "sin_zona"),
         scene_lighting=os.getenv("SENTINEL_SCENE_LIGHTING", "desconocida"),
         supabase_url=os.getenv("SUPABASE_URL", "").strip() or None,
@@ -109,6 +112,10 @@ def get_settings() -> Settings:
         telegram_direct_alerts=_as_bool(
             os.getenv("SENTINEL_TELEGRAM_DIRECT_ALERTS"),
             default=True,
+        ),
+        telegram_callback_polling=_as_bool(
+            os.getenv("SENTINEL_TELEGRAM_CALLBACK_POLLING"),
+            default=False,
         ),
         save_images=_as_bool(os.getenv("SENTINEL_SAVE_IMAGES"), default=False),
         image_dir=Path(os.getenv("SENTINEL_IMAGE_DIR", "capturas")),

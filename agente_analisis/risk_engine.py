@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from agente_analisis.schemas import (
     ActionDecision,
     AnalysisRequest,
@@ -7,7 +9,6 @@ from agente_analisis.schemas import (
     RiskFactor,
     RiskResult,
 )
-
 
 OBJECT_BASE_SCORES = {
     "arma": 80,
@@ -25,6 +26,17 @@ OBJECT_BASE_SCORES = {
     "motorcycle": 10,
 }
 DANGEROUS_OBJECTS = {"arma", "arma_blanca", "fusil", "violencia"}
+KNN_K = 3
+KNN_PROTOTYPES = [
+    ([1.0, 0.95, 0.0, 0.0, 0.0, 0.0, 0.1, 0.2, 0.0, 0.0], 90),
+    ([0.9, 0.85, 0.0, 0.0, 0.0, 0.0, 0.1, 0.1, 0.0, 0.0], 75),
+    ([0.8, 0.65, 1.0, 1.0, 0.4, 0.4, 0.2, 0.5, 0.0, 1.0], 95),
+    ([0.8, 0.55, 0.0, 0.0, 0.2, 0.2, 0.1, 0.7, 0.0, 1.0], 78),
+    ([0.5, 0.85, 0.0, 0.0, 0.0, 0.0, 0.7, 0.2, 0.0, 0.0], 45),
+    ([0.4, 0.80, 0.0, 0.0, 0.0, 0.0, 0.2, 0.2, 0.0, 0.0], 38),
+    ([0.1, 0.90, 0.0, 0.0, 0.0, 0.0, 0.1, 0.1, 0.0, 0.0], 10),
+    ([0.0, 0.90, 0.0, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0], 2),
+]
 
 
 def analyze_event(request: AnalysisRequest) -> AnalysisResponse:
@@ -40,6 +52,7 @@ def analyze_event(request: AnalysisRequest) -> AnalysisResponse:
         suspicion_level=risk_level,
         possible_behavior=infer_behavior(request, risk_level),
         factors=factors,
+        algorithm="risk_rules_v2_knn_temporal",
     )
 
     return AnalysisResponse(
@@ -96,7 +109,68 @@ def calculate_risk_score(request: AnalysisRequest) -> tuple[int, list[RiskFactor
     if memory.eventos_previos_24h >= 10:
         add(8, "historial_eventos", "Actividad reciente alta.")
 
+    knn_score = knn_risk_score(request)
+    if knn_score >= score + 8:
+        points = min(12, max(4, round((knn_score - score) / 4)))
+        add(points, "knn_vecinos_riesgo", f"KNN sugiere riesgo cercano a {knn_score}.")
+    elif knn_score <= score - 20 and objeto not in DANGEROUS_OBJECTS:
+        add(-5, "knn_vecinos_bajo_riesgo", f"KNN compara con eventos de bajo riesgo: {knn_score}.")
+
     return max(0, min(score, 100)), factors
+
+
+def knn_risk_score(request: AnalysisRequest, k: int = KNN_K) -> int:
+    features = _knn_features(request)
+    distances = [
+        (_euclidean_distance(features, prototype_features), score)
+        for prototype_features, score in KNN_PROTOTYPES
+    ]
+    distances.sort(key=lambda item: item[0])
+    nearest = distances[: max(1, k)]
+    weighted_total = 0.0
+    weight_sum = 0.0
+    for distance, score in nearest:
+        weight = 1 / (distance + 0.001)
+        weighted_total += score * weight
+        weight_sum += weight
+    return round(weighted_total / weight_sum)
+
+
+def _knn_features(request: AnalysisRequest) -> list[float]:
+    objeto = normalize_label(request.evento.objeto)
+    context = request.contexto
+    tracking = request.tracking
+    memory = request.memoria
+    danger = {
+        "fusil": 1.0,
+        "arma": 0.9,
+        "arma_blanca": 0.8,
+        "violencia": 0.8,
+        "persona_sospechosa": 0.5,
+        "multitud": 0.4,
+        "persona": 0.1,
+        "no_violencia": 0.0,
+    }.get(objeto, 0.1)
+    return [
+        danger,
+        _clamp(request.evento.confianza, 0, 1),
+        1.0 if is_night(request.evento.hora.hour) else 0.0,
+        1.0 if normalize_label(context.iluminacion) in {"baja", "oscura", "low", "dark"} else 0.0,
+        _clamp(memory.alertas_previas_24h / 5, 0, 1),
+        _clamp(memory.eventos_previos_24h / 20, 0, 1),
+        _clamp(context.cantidad_personas / 5, 0, 1),
+        _clamp(tracking.velocidad / 12, 0, 1),
+        _clamp(tracking.permanencia_segundos / 900, 0, 1),
+        1.0 if tracking.movimiento_erratico else 0.0,
+    ]
+
+
+def _euclidean_distance(left: list[float], right: list[float]) -> float:
+    return math.sqrt(sum((a - b) ** 2 for a, b in zip(left, right)))
+
+
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
 
 
 def decide_action(score: int, risk_level: str, confidence: float) -> ActionDecision:

@@ -10,6 +10,7 @@ from agente_percepcion.events import DetectionEvent, N8nClient, _storage_path_fo
 from agente_percepcion.telegram import TelegramSupervisorClient
 from agente_percepcion.memory import should_emit_detection
 from agente_analisis.risk_engine import analyze_event
+from agente_percepcion.main import _is_alertable_detection, _stabilize_danger_detections
 
 
 def test_detection_event_maps_to_supabase_row() -> None:
@@ -301,6 +302,33 @@ def test_event_gate_allows_same_label_in_different_frame_regions() -> None:
     assert should_emit_detection("violence", "PC-01", last_event_at, 1.0, 5, (10, 10, 120, 120))
     assert should_emit_detection("violence", "PC-01", last_event_at, 1.1, 5, (360, 10, 500, 120))
     assert not should_emit_detection("violence", "PC-01", last_event_at, 1.2, 5, (15, 15, 125, 125))
+
+
+def test_only_high_risk_detections_are_alertable() -> None:
+    assert _is_alertable_detection("arma")
+    assert _is_alertable_detection("knife")
+    assert not _is_alertable_detection("persona")
+    assert not _is_alertable_detection("no_violencia")
+
+
+def test_stabilize_danger_keeps_recent_weapon_when_detector_flickers() -> None:
+    weapon = Detection(label="arma", confidence=0.58, box=(10, 20, 120, 140))
+    detections, last_danger = _stabilize_danger_detections([weapon], None, 10.0, 2.0)
+
+    assert detections == [weapon]
+    assert last_danger is not None
+
+    detections, last_danger = _stabilize_danger_detections([], last_danger, 11.0, 2.0)
+
+    assert len(detections) == 1
+    assert detections[0].label == "arma"
+    assert detections[0].confidence < weapon.confidence
+    assert last_danger is not None
+
+    detections, last_danger = _stabilize_danger_detections([], last_danger, 13.5, 2.0)
+
+    assert detections == []
+    assert last_danger is None
 
 
 def test_draw_detections_adds_bounding_box() -> None:

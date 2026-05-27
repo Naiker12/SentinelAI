@@ -161,9 +161,12 @@ La variable `SENTINEL_CLASSES` controla que clases generan eventos. Con el model
 ```env
 SENTINEL_MODEL=yolo_percepcion/entrenamiento_seguridad/weights/best.pt
 SENTINEL_CLASSES=arma,arma_blanca,fusil,multitud,no_violencia,persona,persona_sospechosa,violencia
+SENTINEL_DANGEROUS_EVENT_COOLDOWN_SECONDS=120
+SENTINEL_DANGER_HOLD_SECONDS=2
 ```
 
 El modelo reporta clases en espanol; el sistema tambien acepta alias antiguos como `Violence`, `NonViolence`, `gun`, `knife` y `person`, normalizandolos al vocabulario nuevo.
+El agente solo envia alertas para clases de riesgo alto; `persona` y `no_violencia` se dibujan en pantalla, pero no disparan Telegram/n8n/Supabase por si solas.
 
 ## n8n
 
