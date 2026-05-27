@@ -155,7 +155,7 @@ El estado actual y roadmap estan en `docs/ESTADO_ACTUAL.md`.
 La variable `SENTINEL_CLASSES` controla que clases generan eventos. Con el modelo de violencia entrenado en Google Colab debe quedar:
 
 ```env
-SENTINEL_MODEL=D:\SentinelAI\proyecto_violence_v4\entrenamiento_violence-3\weights\best.pt
+SENTINEL_MODEL=agente_percepcion/model/best.pt
 SENTINEL_CLASSES=violence,nonviolence
 ```
 

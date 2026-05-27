@@ -5,7 +5,7 @@ Fecha: 2026-05-27
 ## Prioridad Inmediata
 
 1. Usar el modelo propio entrenado en Google Colab.
-2. Confirmar que `SENTINEL_MODEL` apunte a `D:\SentinelAI\proyecto_violence_v4\entrenamiento_violence-3\weights\best.pt`.
+2. Confirmar que `SENTINEL_MODEL` apunte a `agente_percepcion/model/best.pt`.
 3. Probar camara real con `python -m agente_percepcion.main`.
 4. Importar workflow actualizado de n8n.
 5. Configurar Telegram supervisor.

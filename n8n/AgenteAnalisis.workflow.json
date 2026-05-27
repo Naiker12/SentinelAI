@@ -123,19 +123,61 @@
     {
       "id": "37cd851e-34f4-4a7d-b18f-34d7cd5c7f21",
       "name": "Telegram Supervisor - Enviar Validacion",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
       "position": [
         700,
         -180
       ],
       "parameters": {
-        "method": "POST",
-        "url": "=https://api.telegram.org/bot{{$env.SENTINEL_TELEGRAM_BOT_TOKEN}}/sendMessage",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{JSON.stringify({ chat_id: $env.SENTINEL_TELEGRAM_CHAT_ID, text: $json.text, parse_mode: $json.parse_mode, disable_notification: $json.disable_notification, reply_markup: $json.reply_markup })}}",
-        "options": {}
+        "chatId": "={{$env.SENTINEL_TELEGRAM_CHAT_ID}}",
+        "text": "={{$json.text}}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Confirmar amenaza",
+                    "additionalFields": {
+                      "callback_data": "={{'sentinel:confirm:' + $json.review_context.review_id}}"
+                    }
+                  },
+                  {
+                    "text": "Falso positivo",
+                    "additionalFields": {
+                      "callback_data": "={{'sentinel:false:' + $json.review_context.review_id}}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Mas revision",
+                    "additionalFields": {
+                      "callback_data": "={{'sentinel:review:' + $json.review_context.review_id}}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "disable_notification": "={{$json.disable_notification}}",
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "SentinelAI Telegram Bot"
+        }
       }
     },
     {
@@ -183,6 +225,60 @@
         "options": {
           "responseCode": 200
         }
+      }
+    },
+    {
+      "id": "1bb88311-6fd3-4cb5-85f5-700ce4d88819",
+      "name": "Telegram Trigger - Callback Supervisor",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -980,
+        620
+      ],
+      "parameters": {
+        "updates": [
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "SentinelAI Telegram Bot"
+        }
+      }
+    },
+    {
+      "id": "note-telegram-config-sentinelai",
+      "name": "Nota - Configurar Telegram Bot",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        620,
+        -430
+      ],
+      "parameters": {
+        "width": 440,
+        "height": 260,
+        "color": 5,
+        "content": "## Telegram supervisor\n\n1. Crea un bot con @BotFather.\n2. En n8n crea credencial **Telegram API** con el token del bot.\n3. Asigna esa credencial a:\n   - Telegram Supervisor - Enviar Validacion\n   - Telegram Trigger - Callback Supervisor\n4. Define `SENTINEL_TELEGRAM_CHAT_ID` en el entorno de n8n.\n\nLos botones envian `sentinel:confirm|false|review:review_id`."
+      }
+    },
+    {
+      "id": "note-telegram-callback-sentinelai",
+      "name": "Nota - Callback Supervisor",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1060,
+        780
+      ],
+      "parameters": {
+        "width": 500,
+        "height": 190,
+        "color": 4,
+        "content": "## Callback de validacion humana\n\nLa ruta recomendada es el **Telegram Trigger**, porque n8n registra el webhook del bot al activar el workflow.\n\nEl webhook `sentinel-telegram-callback` queda como respaldo/manual si decides configurar el webhook del bot por URL externa."
       }
     }
   ],
@@ -287,15 +383,26 @@
           }
         ]
       ]
+    },
+    "Telegram Trigger - Callback Supervisor": {
+      "main": [
+        [
+          {
+            "node": "AgenteInterfazHumana - Procesar Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "sentinelai-human-interface-v1",
+  "versionId": "sentinelai-telegram-native-v1",
   "meta": {
-    "templateCredsSetupCompleted": true
+    "templateCredsSetupCompleted": false
   },
   "tags": []
 }

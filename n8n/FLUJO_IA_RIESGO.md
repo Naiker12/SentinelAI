@@ -22,6 +22,10 @@ Webhook - Evento Percepcion
 Webhook - Callback Telegram Supervisor
   -> AgenteInterfazHumana - Procesar Callback
   -> Responder Callback Telegram
+
+Telegram Trigger - Callback Supervisor
+  -> AgenteInterfazHumana - Procesar Callback
+  -> Responder Callback Telegram
 ```
 
 El workflow `n8n/AgenteAnalisis.workflow.json` ya contiene estos nodos. Python recibe
@@ -190,9 +194,34 @@ Ese webhook usa
 }
 ```
 
-Configura ese URL como webhook del bot de Telegram para recibir los botones inline.
-El envio de mensajes usa `SENTINEL_TELEGRAM_BOT_TOKEN` y
-`SENTINEL_TELEGRAM_CHAT_ID`.
+## Configuracion del bot de Telegram en n8n
+
+El workflow importable usa nodos nativos de Telegram:
+
+- `Telegram Supervisor - Enviar Validacion`
+- `Telegram Trigger - Callback Supervisor`
+
+Pasos:
+
+1. Crea un bot en Telegram con `@BotFather`.
+2. Copia el token del bot.
+3. En n8n crea una credencial de tipo `Telegram API`.
+4. Pega el token en esa credencial.
+5. Asigna esa credencial a los dos nodos de Telegram.
+6. Define `SENTINEL_TELEGRAM_CHAT_ID` en el entorno donde corre n8n.
+7. Activa el workflow para que `Telegram Trigger - Callback Supervisor` registre el webhook del bot.
+
+El envio de mensajes usa el `chatId` desde:
+
+```text
+{{$env.SENTINEL_TELEGRAM_CHAT_ID}}
+```
+
+El token del bot no debe ir en el JSON del workflow ni en codigo; debe vivir en
+la credencial segura de n8n.
+
+El webhook `sentinel-telegram-callback` queda como respaldo manual si decides
+configurar el callback del bot por URL externa en vez de usar `Telegram Trigger`.
 
 Reglas de accion final:
 

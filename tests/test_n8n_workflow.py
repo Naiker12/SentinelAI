@@ -23,6 +23,7 @@ def test_agente_analisis_workflow_has_core_nodes() -> None:
     assert "Requiere Revision Humana?" in node_names
     assert "AgenteInterfazHumana - Preparar Telegram" in node_names
     assert "Telegram Supervisor - Enviar Validacion" in node_names
+    assert "Telegram Trigger - Callback Supervisor" in node_names
     assert "Webhook - Callback Telegram Supervisor" in node_names
     assert "AgenteInterfazHumana - Procesar Callback" in node_names
     assert "Responder Callback Telegram" in node_names
@@ -59,9 +60,28 @@ def test_agente_analisis_workflow_connections_are_complete() -> None:
         == "AgenteInterfazHumana - Procesar Callback"
     )
     assert (
+        connections["Telegram Trigger - Callback Supervisor"]["main"][0][0]["node"]
+        == "AgenteInterfazHumana - Procesar Callback"
+    )
+    assert (
         connections["AgenteInterfazHumana - Procesar Callback"]["main"][0][0]["node"]
         == "Responder Callback Telegram"
     )
+
+
+def test_agente_analisis_workflow_uses_native_telegram_nodes() -> None:
+    workflow = json.loads(Path("n8n/AgenteAnalisis.workflow.json").read_text(encoding="utf-8"))
+    nodes = {node["name"]: node for node in workflow["nodes"]}
+
+    sender = nodes["Telegram Supervisor - Enviar Validacion"]
+    trigger = nodes["Telegram Trigger - Callback Supervisor"]
+
+    assert sender["type"] == "n8n-nodes-base.telegram"
+    assert trigger["type"] == "n8n-nodes-base.telegramTrigger"
+    assert sender["credentials"]["telegramApi"]["name"] == "SentinelAI Telegram Bot"
+    assert trigger["credentials"]["telegramApi"]["name"] == "SentinelAI Telegram Bot"
+    assert sender["parameters"]["replyMarkup"] == "inlineKeyboard"
+    assert "SENTINEL_TELEGRAM_CHAT_ID" in sender["parameters"]["chatId"]
 
 
 def test_agente_analisis_workflow_returns_persistence_contract() -> None:

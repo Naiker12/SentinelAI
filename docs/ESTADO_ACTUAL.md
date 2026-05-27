@@ -25,7 +25,7 @@ Camara
 - Se elimino `agente_percepcion/tracking.py`.
 - Se movio la memoria temporal a `agente_percepcion/memory.py`.
 - `main.py` usa cooldown por camara+objeto.
-- `SENTINEL_MODEL` apunta a `D:\SentinelAI\proyecto_violence_v4\entrenamiento_violence-3\weights\best.pt`.
+- `SENTINEL_MODEL` apunta a `agente_percepcion/model/best.pt`.
 - El campo `tracking` queda solo como compatibilidad y normalmente viaja vacio.
 - El dashboard reemplaza `AgenteTracking` por `Interfaz Humana`.
 - n8n queda preparado para `review_id`, botones de Telegram y feedback de supervisor.
@@ -46,7 +46,7 @@ Camara
 Ruta esperada:
 
 ```env
-SENTINEL_MODEL=D:\SentinelAI\proyecto_violence_v4\entrenamiento_violence-3\weights\best.pt
+SENTINEL_MODEL=agente_percepcion/model/best.pt
 SENTINEL_CLASSES=violence,nonviolence
 ```
 
