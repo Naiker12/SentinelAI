@@ -5,11 +5,11 @@ SentinelAI es un sistema inteligente de monitoreo preventivo basado en vision ar
 ## Principios
 
 - `AgentePercepcion` detecta objetos, no toma decisiones.
-- `AgenteTracking` asigna IDs y calcula comportamiento temporal.
 - `AgenteAnalisis` interpreta contexto y prepara evidencia.
 - `AgenteRiesgo` calcula puntaje y nivel de riesgo.
 - `AgenteAccion` decide notificaciones y flujos.
 - `AgenteMemoria` persiste eventos e historial en Supabase.
+- `AgenteInterfazHumana` valida alertas con supervisor por Telegram/Dashboard.
 - n8n orquesta acciones, no hace IA pesada.
 
 ## Flujo Actual Recomendado
@@ -18,7 +18,6 @@ SentinelAI es un sistema inteligente de monitoreo preventivo basado en vision ar
 Camara/Webcam/RTSP
   -> Servicio Python IA
      -> YOLO
-     -> Tracking persistente
      -> AgenteAnalisis
      -> AgenteRiesgo
      -> JSON limpio
@@ -35,6 +34,7 @@ Camara/Webcam/RTSP
 AgentePercepcion
   -> YOLOv8 + OpenCV
   -> bounding boxes
+  -> cooldown por camara/objeto
   -> eventos JSON
   -> Supabase
   -> n8n
@@ -75,13 +75,7 @@ Entrada:
     "iluminacion": "baja",
     "cantidad_personas": 1
   },
-  "tracking": {
-    "person_id": "track_14",
-    "track_id": "knife_0001",
-    "velocidad": 8.2,
-    "permanencia_segundos": 420,
-    "movimiento_erratico": true
-  },
+  "tracking": {},
   "memoria": {
     "eventos_previos_24h": 12,
     "alertas_previas_24h": 2
@@ -104,13 +98,7 @@ para orquestacion:
     "box": [10, 20, 200, 300],
     "imagen": null
   },
-  "tracking": {
-    "person_id": "person_0001",
-    "track_id": "gun_0001",
-    "velocidad": 8.2,
-    "permanencia_segundos": 420,
-    "movimiento_erratico": true
-  },
+  "tracking": {},
   "resultado": {
     "nivel_riesgo": "CRITICO",
     "score": 120,
@@ -156,7 +144,7 @@ Salida:
 
 1. YOLO funcionando con webcam.
 2. Dataset propio y etiquetado.
-3. Tracking con ByteTrack o DeepSORT.
+3. Modelo propio `best.pt` entrenado con dataset real.
 4. AgenteAnalisis + AgenteRiesgo.
 5. Memoria real en Supabase.
 6. n8n para alertas y automatizacion.

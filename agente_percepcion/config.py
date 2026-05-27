@@ -47,7 +47,6 @@ class Settings:
     confidence: float
     classes: set[str]
     event_cooldown_seconds: float
-    tracking_iou_threshold: float
     scene_zone: str
     scene_lighting: str
     supabase_url: str | None
@@ -69,11 +68,10 @@ def get_settings() -> Settings:
         camera_height=_as_optional_int(os.getenv("SENTINEL_CAMERA_HEIGHT")),
         camera_fps=_as_optional_int(os.getenv("SENTINEL_CAMERA_FPS")),
         camera_fourcc=os.getenv("SENTINEL_CAMERA_FOURCC", "MJPG").strip() or None,
-        model_path=os.getenv("SENTINEL_MODEL", "yolov8n.pt"),
+        model_path=os.getenv("SENTINEL_MODEL", "agente_percepcion/model/best.pt"),
         confidence=float(os.getenv("SENTINEL_CONFIDENCE", "0.5")),
         classes=_classes(os.getenv("SENTINEL_CLASSES", "person")),
         event_cooldown_seconds=float(os.getenv("SENTINEL_EVENT_COOLDOWN_SECONDS", "5")),
-        tracking_iou_threshold=float(os.getenv("SENTINEL_TRACKING_IOU_THRESHOLD", "0.25")),
         scene_zone=os.getenv("SENTINEL_SCENE_ZONE", "sin_zona"),
         scene_lighting=os.getenv("SENTINEL_SCENE_LIGHTING", "desconocida"),
         supabase_url=os.getenv("SUPABASE_URL", "").strip() or None,

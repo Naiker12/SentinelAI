@@ -2,7 +2,7 @@
 
 Este workflow recibe eventos del `AgentePercepcion`, normaliza el payload, calcula un score de riesgo y responde con una accion recomendada.
 
-n8n no hace IA pesada. En esta arquitectura n8n orquesta, decide acciones y conecta alertas. La vision artificial, tracking y prediccion pesada deben vivir en Python/FastAPI.
+n8n no hace IA pesada. En esta arquitectura n8n orquesta, decide acciones y conecta alertas. La vision artificial y la prediccion pesada deben vivir en Python/FastAPI.
 
 ## Flujo
 
@@ -81,7 +81,8 @@ http://localhost:5678/webhook-test/sentinel-analysis
 ## Contrato enriquecido desde AgentePercepcion
 
 Cuando ejecutas `python -m agente_percepcion.main`, el agente ya envia contexto,
-tracking y memoria. Los archivos `test_payload_*.json` son solo para validar n8n
+memoria y analisis previo. El campo `tracking` se mantiene como compatibilidad y
+normalmente viaja vacio. Los archivos `test_payload_*.json` son solo para validar n8n
 sin abrir la camara.
 
 ```json
@@ -97,13 +98,7 @@ sin abrir la camara.
     "iluminacion": "baja",
     "cantidad_personas": 1
   },
-  "tracking": {
-    "person_id": "person_0001",
-    "track_id": "knife_0001",
-    "velocidad": 8.2,
-    "permanencia_segundos": 420,
-    "movimiento_erratico": true
-  },
+  "tracking": {},
   "memoria": {
     "eventos_previos_24h": 12,
     "alertas_previas_24h": 2
@@ -191,7 +186,7 @@ Niveles:
 - `50-79`: `ALTO`
 - `80-100`: `CRITICO`
 
-Importante: una persona o un celular no son sospechosos por si solos. Suben de nivel solo con contexto, tracking, horario, objeto peligroso o historial.
+Importante: una persona o un celular no son sospechosos por si solos. Suben de nivel solo con contexto, horario, objeto peligroso o historial.
 
 ## Como debe quedar en n8n para camara real
 
@@ -244,7 +239,7 @@ python tools/test_n8n_webhook.py --url http://localhost:5678/webhook/sentinel-an
 
 ## Siguientes fases
 
-- `AgenteTracking`: ByteTrack/DeepSORT en Python.
+- `AgenteInterfazHumana`: Telegram + tabla `human_reviews` para validacion de supervisor.
 - `AgenteMemoria`: consultas a Supabase para historial real.
 - `AgentePrediccion`: modelo ML con scikit-learn cuando exista dataset suficiente.
 - `AgenteAccion`: Telegram, Discord, email y dashboard realtime.

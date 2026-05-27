@@ -10,6 +10,8 @@ from agente_analisis.schemas import (
 
 
 OBJECT_BASE_SCORES = {
+    "violence": 70,
+    "nonviolence": 2,
     "gun": 80,
     "knife": 60,
     "scissors": 40,
@@ -20,7 +22,7 @@ OBJECT_BASE_SCORES = {
     "truck": 8,
     "motorcycle": 10,
 }
-DANGEROUS_OBJECTS = {"knife", "gun", "scissors"}
+DANGEROUS_OBJECTS = {"knife", "gun", "scissors", "violence"}
 
 
 def analyze_event(request: AnalysisRequest) -> AnalysisResponse:
@@ -41,11 +43,11 @@ def analyze_event(request: AnalysisRequest) -> AnalysisResponse:
     return AnalysisResponse(
         pipeline=[
             "AgentePercepcion",
-            "AgenteTracking",
             "AgenteAnalisis",
             "AgenteRiesgo",
             "AgenteAccion",
             "AgenteMemoria",
+            "AgenteInterfazHumana",
         ],
         input=request,
         result=result,
@@ -56,7 +58,6 @@ def analyze_event(request: AnalysisRequest) -> AnalysisResponse:
 def calculate_risk_score(request: AnalysisRequest) -> tuple[int, list[RiskFactor]]:
     event = request.evento
     context = request.contexto
-    tracking = request.tracking
     memory = request.memoria
     factors: list[RiskFactor] = []
     score = 0
@@ -87,15 +88,6 @@ def calculate_risk_score(request: AnalysisRequest) -> tuple[int, list[RiskFactor
 
     if normalize_label(context.iluminacion) in {"baja", "oscura", "low", "dark"}:
         add(10, "baja_iluminacion", "Condicion de baja iluminacion.")
-
-    if tracking.velocidad >= 7:
-        add(12, "movimiento_rapido", f"Velocidad elevada: {tracking.velocidad}.")
-    if tracking.movimiento_erratico:
-        add(15, "movimiento_erratico", "Movimiento erratico reportado.")
-    if tracking.permanencia_segundos >= 900:
-        add(25, "permanencia_sospechosa", "Permanencia mayor o igual a 15 minutos.")
-    elif tracking.permanencia_segundos >= 300:
-        add(10, "permanencia_media", "Permanencia mayor o igual a 5 minutos.")
 
     if memory.alertas_previas_24h >= 2:
         add(15, "historial_alertas", "Alertas recientes en la camara/zona.")
@@ -171,11 +163,11 @@ def classify_risk(score: int) -> str:
 def infer_behavior(request: AnalysisRequest, risk_level: str) -> str:
     objeto = normalize_label(request.evento.objeto)
     if risk_level in {"CRITICO", "ALTO"} and objeto in DANGEROUS_OBJECTS:
+        if objeto == "violence":
+            return "posible_pelea_o_agresion"
         return "posible_amenaza_con_objeto_peligroso"
-    if request.tracking.permanencia_segundos >= 900:
-        return "posible_merodeo"
-    if request.tracking.movimiento_erratico:
-        return "movimiento_anomalo"
+    if request.memoria.alertas_previas_24h >= 2:
+        return "zona_con_alertas_recientes"
     return "evento_observado"
 
 
@@ -191,6 +183,14 @@ def normalize_label(value: str | None) -> str:
         "cellphone": "cell_phone",
         "mobile_phone": "cell_phone",
         "phone": "cell_phone",
+        "non_violence": "nonviolence",
+        "non-violence": "nonviolence",
+        "no_violence": "nonviolence",
+        "no-violence": "nonviolence",
+        "normal": "nonviolence",
+        "pelea": "violence",
+        "fight": "violence",
+        "fighting": "violence",
     }
     return aliases.get(normalized, normalized)
 

@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const payload = $json.body ?? $json;\nif (payload.entrada && payload.resultado && payload.decision) {\n  return [{ json: payload }];\n}\nconst context = payload.contexto ?? payload.context ?? {};\nconst tracking = payload.tracking ?? {};\nconst memoria = payload.memoria ?? payload.memory ?? {};\n\nfunction normalizeObject(value) {\n  const normalized = String(value ?? '').trim().toLowerCase().replace(/[_\\s]+/g, '_');\n  const aliases = {\n    pistol: 'gun',\n    pistola: 'gun',\n    handgun: 'gun',\n    firearm: 'gun',\n    weapon: 'gun',\n    arma: 'gun',\n    cellphone: 'cell_phone',\n    mobile_phone: 'cell_phone',\n    phone: 'cell_phone'\n  };\n  return aliases[normalized] ?? normalized;\n}\n\nfunction numberOrDefault(value, fallback = 0) {\n  const parsed = Number(value);\n  return Number.isFinite(parsed) ? parsed : fallback;\n}\n\nconst objeto = normalizeObject(payload.objeto ?? payload.object);\nconst confianza = numberOrDefault(payload.confianza ?? payload.confidence);\nconst camara = String(payload.camara ?? payload.camera ?? payload.camara_id ?? 'PC-01');\nconst hora = String(payload.hora ?? payload.detected_at ?? new Date().toISOString());\nconst box = payload.box ?? null;\nconst imagen = payload.imagen ?? payload.image_path ?? payload.imagen_url ?? null;\n\nconst eventTime = new Date(hora);\nconst hour = Number.isNaN(eventTime.getTime()) ? new Date().getHours() : eventTime.getHours();\nconst isNight = hour >= 22 || hour <= 5;\n\nreturn [\n  {\n    json: {\n      agente: 'AgenteAnalisis',\n      version: '0.3.0',\n      entrada: {\n        objeto,\n        confianza,\n        camara,\n        hora,\n        box,\n        imagen\n      },\n      contexto: {\n        zona: context.zona ?? context.zone ?? 'sin_zona',\n        iluminacion: normalizeObject(context.iluminacion ?? context.lighting ?? 'desconocida'),\n        cantidad_personas: numberOrDefault(context.cantidad_personas ?? context.people_count),\n        hora_local: hour,\n        noche: isNight\n      },\n      tracking: {\n        person_id: tracking.person_id ?? tracking.track_id ?? null,\n        track_id: tracking.track_id ?? tracking.person_id ?? null,\n        velocidad: numberOrDefault(tracking.velocidad ?? tracking.speed),\n        permanencia_segundos: numberOrDefault(tracking.permanencia_segundos ?? tracking.loitering_seconds),\n        movimiento_erratico: Boolean(tracking.movimiento_erratico ?? tracking.erratic_motion ?? false)\n      },\n      memoria: {\n        eventos_previos_24h: numberOrDefault(memoria.eventos_previos_24h ?? memoria.previous_events_24h),\n        alertas_previas_24h: numberOrDefault(memoria.alertas_previas_24h ?? memoria.previous_alerts_24h)\n      }\n    }\n  }\n];"
+        "jsCode": "const payload = $json.body ?? $json;\nif (payload.entrada && payload.resultado && payload.decision) {\n  return [{ json: payload }];\n}\nconst context = payload.contexto ?? payload.context ?? {};\nconst memoria = payload.memoria ?? payload.memory ?? {};\n\nfunction normalizeObject(value) {\n  const normalized = String(value ?? '').trim().toLowerCase().replace(/[_\\s]+/g, '_');\n  const aliases = {\n    pistol: 'gun',\n    pistola: 'gun',\n    handgun: 'gun',\n    firearm: 'gun',\n    weapon: 'gun',\n    arma: 'gun',\n    cellphone: 'cell_phone',\n    mobile_phone: 'cell_phone',\n    phone: 'cell_phone',\n    non_violence: 'nonviolence',\n    'non-violence': 'nonviolence',\n    no_violence: 'nonviolence',\n    'no-violence': 'nonviolence',\n    normal: 'nonviolence',\n    pelea: 'violence',\n    fight: 'violence',\n    fighting: 'violence'\n  };\n  return aliases[normalized] ?? normalized;\n}\n\nfunction numberOrDefault(value, fallback = 0) {\n  const parsed = Number(value);\n  return Number.isFinite(parsed) ? parsed : fallback;\n}\n\nfunction reviewIdFor(camera, object, time) {\n  return String(camera + '_' + object + '_' + time).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'sin_evento';\n}\n\nconst objeto = normalizeObject(payload.objeto ?? payload.object);\nconst confianza = numberOrDefault(payload.confianza ?? payload.confidence);\nconst camara = String(payload.camara ?? payload.camera ?? payload.camara_id ?? 'PC-01');\nconst hora = String(payload.hora ?? payload.detected_at ?? new Date().toISOString());\nconst box = payload.box ?? null;\nconst imagen = payload.imagen ?? payload.image_path ?? payload.imagen_url ?? null;\n\nconst eventTime = new Date(hora);\nconst hour = Number.isNaN(eventTime.getTime()) ? new Date().getHours() : eventTime.getHours();\nconst isNight = hour >= 22 || hour <= 5;\n\nreturn [\n  {\n    json: {\n      agente: 'AgenteAnalisis',\n      version: '0.4.0',\n      entrada: { objeto, confianza, camara, hora, box, imagen },\n      contexto: {\n        zona: context.zona ?? context.zone ?? 'sin_zona',\n        iluminacion: normalizeObject(context.iluminacion ?? context.lighting ?? 'desconocida'),\n        cantidad_personas: numberOrDefault(context.cantidad_personas ?? context.people_count),\n        hora_local: hour,\n        noche: isNight\n      },\n      tracking: {},\n      memoria: {\n        eventos_previos_24h: numberOrDefault(memoria.eventos_previos_24h ?? memoria.previous_events_24h),\n        alertas_previas_24h: numberOrDefault(memoria.alertas_previas_24h ?? memoria.previous_alerts_24h)\n      },\n      review_id: reviewIdFor(camara, objeto, hora)\n    }\n  }\n];"
       },
       "id": "4ea02ee2-a31b-4f29-b0fa-93d96d4c1375",
       "name": "Normalizar Evento",
@@ -33,7 +33,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $json;\nif (data.resultado && data.decision) {\n  return [{ json: data }];\n}\nconst objeto = data.entrada.objeto;\nconst confianza = data.entrada.confianza;\nconst contexto = data.contexto;\nconst tracking = data.tracking;\nconst memoria = data.memoria;\n\nconst objectBaseScores = {\n  gun: 80,\n  knife: 60,\n  scissors: 40,\n  backpack: 18,\n  person: 10,\n  cell_phone: 5,\n  car: 8,\n  truck: 8,\n  motorcycle: 10\n};\nconst dangerousObjects = new Set(['knife', 'gun', 'scissors']);\nlet score = 0;\nconst factores = [];\n\nfunction add(points, code, detail) {\n  score += points;\n  factores.push({ code, points, detail });\n}\n\nif (!objeto) {\n  add(5, 'payload_incompleto', 'No se recibio objeto detectable.');\n} else if (Object.prototype.hasOwnProperty.call(objectBaseScores, objeto)) {\n  const code = dangerousObjects.has(objeto) ? 'objeto_peligroso' : 'objeto_base';\n  add(objectBaseScores[objeto], code, `Objeto detectado: ${objeto}.`);\n} else {\n  add(8, 'objeto_observado', `Objeto observado sin regla critica: ${objeto}.`);\n}\n\nif (dangerousObjects.has(objeto) && tracking.person_id) {\n  add(10, 'persona_asociada_objeto_peligroso', `Objeto peligroso asociado a ${tracking.person_id}.`);\n}\nif (objeto === 'person' && contexto.cantidad_personas >= 2) {\n  add(5, 'multiples_personas', `Personas detectadas en escena: ${contexto.cantidad_personas}.`);\n}\n\nif (confianza >= 0.9) add(10, 'alta_confianza', `Confianza alta: ${confianza}.`);\nelse if (confianza >= 0.7) add(5, 'confianza_media', `Confianza aceptable: ${confianza}.`);\nelse add(-10, 'baja_confianza', `Confianza baja: ${confianza}.`);\n\nif (contexto.noche) add(15, 'horario_nocturno', 'Evento detectado en horario nocturno.');\nif (['baja', 'oscura', 'low', 'dark'].includes(contexto.iluminacion)) add(10, 'baja_iluminacion', 'Condicion de baja iluminacion.');\nif (tracking.velocidad >= 7) add(12, 'movimiento_rapido', `Velocidad elevada: ${tracking.velocidad}.`);\nif (tracking.movimiento_erratico) add(15, 'movimiento_erratico', 'Movimiento erratico reportado por tracking.');\nif (tracking.permanencia_segundos >= 900) add(25, 'permanencia_sospechosa', 'Permanencia mayor o igual a 15 minutos.');\nelse if (tracking.permanencia_segundos >= 300) add(10, 'permanencia_media', 'Permanencia mayor o igual a 5 minutos.');\nif (memoria.alertas_previas_24h >= 2) add(15, 'historial_alertas', 'La camara/zona tiene alertas recientes.');\nif (memoria.eventos_previos_24h >= 10) add(8, 'historial_eventos', 'La camara/zona tiene actividad reciente alta.');\n\nscore = Math.max(0, Math.min(100, Math.round(score)));\nlet riesgo = 'BAJO';\nlet severidad = 'INFORMATIVA';\nif (score >= 90) {\n  riesgo = 'CRITICO';\n  severidad = 'CRITICA';\n} else if (score >= 70) {\n  riesgo = 'ALTO';\n  severidad = 'ALTA';\n} else if (score >= 30) {\n  riesgo = 'MEDIO';\n  severidad = 'MEDIA';\n}\n\nreturn [\n  {\n    json: {\n      ...data,\n      resultado: {\n        riesgo,\n        nivel_riesgo: riesgo,\n        severidad,\n        score,\n        score_riesgo: Math.round((score / 100) * 10000) / 10000,\n        factores,\n        algoritmo: 'risk_rules_v2'\n      }\n    }\n  }\n];"
+        "jsCode": "const data = $json;\nif (data.resultado && data.decision) {\n  return [{ json: data }];\n}\nconst objeto = data.entrada.objeto;\nconst confianza = data.entrada.confianza;\nconst contexto = data.contexto;\nconst memoria = data.memoria;\n\nconst objectBaseScores = {\n  gun: 80,\n  knife: 60,\n  scissors: 40,\n  backpack: 18,\n  person: 10,\n  cell_phone: 5,\n  car: 8,\n  truck: 8,\n  motorcycle: 10,\n  violence: 70,\n  nonviolence: 2\n};\nconst dangerousObjects = new Set(['knife', 'gun', 'scissors', 'violence']);\nlet score = 0;\nconst factores = [];\n\nfunction add(points, code, detail) {\n  score += points;\n  factores.push({ code, points, detail });\n}\n\nif (!objeto) {\n  add(5, 'payload_incompleto', 'No se recibio objeto detectable.');\n} else if (Object.prototype.hasOwnProperty.call(objectBaseScores, objeto)) {\n  const code = dangerousObjects.has(objeto) ? 'objeto_peligroso' : 'objeto_base';\n  add(objectBaseScores[objeto], code, 'Objeto detectado: ' + objeto + '.');\n} else {\n  add(8, 'objeto_observado', 'Objeto observado sin regla critica: ' + objeto + '.');\n}\n\nif (objeto === 'person' && contexto.cantidad_personas >= 2) {\n  add(5, 'multiples_personas', 'Personas detectadas en escena: ' + contexto.cantidad_personas + '.');\n}\n\nif (confianza >= 0.9) add(10, 'alta_confianza', 'Confianza alta: ' + confianza + '.');\nelse if (confianza >= 0.7) add(5, 'confianza_media', 'Confianza aceptable: ' + confianza + '.');\nelse add(-10, 'baja_confianza', 'Confianza baja: ' + confianza + '.');\n\nif (contexto.noche) add(15, 'horario_nocturno', 'Evento detectado en horario nocturno.');\nif (['baja', 'oscura', 'low', 'dark'].includes(contexto.iluminacion)) add(10, 'baja_iluminacion', 'Condicion de baja iluminacion.');\nif (memoria.alertas_previas_24h >= 2) add(15, 'historial_alertas', 'La camara/zona tiene alertas recientes.');\nif (memoria.eventos_previos_24h >= 10) add(8, 'historial_eventos', 'La camara/zona tiene actividad reciente alta.');\n\nscore = Math.max(0, Math.min(100, Math.round(score)));\nlet riesgo = 'BAJO';\nlet severidad = 'INFORMATIVA';\nif (score >= 90) {\n  riesgo = 'CRITICO';\n  severidad = 'CRITICA';\n} else if (score >= 70) {\n  riesgo = 'ALTO';\n  severidad = 'ALTA';\n} else if (score >= 30) {\n  riesgo = 'MEDIO';\n  severidad = 'MEDIA';\n}\n\nreturn [\n  {\n    json: {\n      ...data,\n      resultado: {\n        riesgo,\n        nivel_riesgo: riesgo,\n        severidad,\n        score,\n        score_riesgo: Math.round((score / 100) * 10000) / 10000,\n        factores,\n        algoritmo: 'risk_rules_v4_no_tracking'\n      }\n    }\n  }\n];"
       },
       "id": "cc6f34c4-62c0-477b-af39-a91e930770cb",
       "name": "AgenteRiesgo - Score Hibrido",
@@ -46,7 +46,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $json;\nif (data.persistencia && data.resultado && data.decision) {\n  return [{ json: data }];\n}\nconst score = data.resultado.score;\nconst riesgo = data.resultado.riesgo;\nconst severidad = data.resultado.severidad;\n\nlet accion = 'REGISTRAR_EVENTO';\nlet prioridad = 2;\nlet notificar = false;\nconst canales = [];\nconst accionesHumanas = ['CONFIRMAR_AMENAZA', 'FALSO_POSITIVO', 'REQUIERE_MAS_REVISION'];\nlet requiereRevisionHumana = false;\nlet estadoRevisionHumana = 'NO_REQUERIDA';\nlet automatizacionBloqueada = false;\n\nif (score >= 90) {\n  accion = 'SOLICITAR_VALIDACION_URGENTE';\n  prioridad = 10;\n  notificar = true;\n  canales.push('telegram_supervisor', 'dashboard_realtime');\n  requiereRevisionHumana = true;\n  estadoRevisionHumana = 'PENDIENTE';\n  automatizacionBloqueada = true;\n} else if (score >= 70) {\n  accion = 'SOLICITAR_VALIDACION_HUMANA';\n  prioridad = 8;\n  notificar = true;\n  canales.push('telegram_supervisor', 'dashboard_realtime');\n  requiereRevisionHumana = true;\n  estadoRevisionHumana = 'PENDIENTE';\n  automatizacionBloqueada = true;\n} else if (score >= 30) {\n  accion = 'SOLICITAR_REVISION_HUMANA';\n  prioridad = 5;\n  notificar = true;\n  canales.push('telegram_supervisor');\n  requiereRevisionHumana = true;\n  estadoRevisionHumana = 'PENDIENTE';\n  automatizacionBloqueada = true;\n} else if (data.entrada.confianza < 0.5) {\n  accion = 'IGNORAR_BAJA_CONFIANZA';\n  prioridad = 1;\n}\n\nreturn [\n  {\n    json: {\n      status: 'procesado',\n      pipeline: ['AgentePercepcion', 'AgenteTracking', 'AgenteAnalisis', 'AgenteRiesgo', 'AgenteAccion', 'AgenteMemoria'],\n      agente: data.agente,\n      version: data.version,\n      entrada: data.entrada,\n      contexto: data.contexto,\n      tracking: data.tracking,\n      memoria: data.memoria,\n      resultado: data.resultado,\n      decision: {\n        accion,\n        accion_tomada: accion,\n        prioridad,\n        notificar,\n        canales,\n        guardar_en_supabase: true,\n        requiere_revision_humana: requiereRevisionHumana,\n        estado_revision_humana: estadoRevisionHumana,\n        acciones_humanas_permitidas: requiereRevisionHumana ? accionesHumanas : [],\n        automatizacion_bloqueada: automatizacionBloqueada\n      },\n      persistencia: {\n        camara_id: data.entrada.camara,\n        objeto: data.entrada.objeto,\n        confianza: data.entrada.confianza,\n        score_riesgo: data.resultado.score_riesgo,\n        nivel_riesgo: data.resultado.nivel_riesgo,\n        accion_tomada: accion,\n        alertas_previas_24h: data.memoria.alertas_previas_24h,\n        detected_at: data.entrada.hora,\n        box: data.entrada.box,\n        contexto: data.contexto,\n        tracking: data.tracking,\n        memoria: data.memoria,\n        requiere_revision_humana: requiereRevisionHumana,\n        estado_revision_humana: estadoRevisionHumana\n      },\n      mensaje: `${accion}: ${riesgo} con score ${data.resultado.score_riesgo}`,\n      siguientes_agentes: {\n        tracking: 'activo_en_agente_percepcion',\n        prediccion_ml: 'pendiente_fase_7',\n        dashboard: 'listo_para_realtime'\n      },\n      procesado_en: new Date().toISOString()\n    }\n  }\n];"
+        "jsCode": "const data = $json;\nif (data.persistencia && data.resultado && data.decision) {\n  return [{ json: data }];\n}\nconst score = data.resultado.score;\nconst riesgo = data.resultado.riesgo;\nconst reviewId = data.review_id ?? data.persistencia?.review_id ?? 'sin_evento';\n\nlet accion = 'REGISTRAR_EVENTO';\nlet prioridad = 2;\nlet notificar = false;\nconst canales = [];\nconst accionesHumanas = ['CONFIRMAR_AMENAZA', 'FALSO_POSITIVO', 'REQUIERE_MAS_REVISION'];\nlet requiereRevisionHumana = false;\nlet estadoRevisionHumana = 'NO_REQUERIDA';\nlet automatizacionBloqueada = false;\n\nif (score >= 90) {\n  accion = 'SOLICITAR_VALIDACION_URGENTE';\n  prioridad = 10;\n  notificar = true;\n  canales.push('telegram_supervisor', 'dashboard_realtime');\n  requiereRevisionHumana = true;\n  estadoRevisionHumana = 'PENDIENTE';\n  automatizacionBloqueada = true;\n} else if (score >= 70) {\n  accion = 'SOLICITAR_VALIDACION_HUMANA';\n  prioridad = 8;\n  notificar = true;\n  canales.push('telegram_supervisor', 'dashboard_realtime');\n  requiereRevisionHumana = true;\n  estadoRevisionHumana = 'PENDIENTE';\n  automatizacionBloqueada = true;\n} else if (score >= 30) {\n  accion = 'SOLICITAR_REVISION_HUMANA';\n  prioridad = 5;\n  notificar = true;\n  canales.push('telegram_supervisor');\n  requiereRevisionHumana = true;\n  estadoRevisionHumana = 'PENDIENTE';\n  automatizacionBloqueada = true;\n} else if (data.entrada.confianza < 0.5) {\n  accion = 'IGNORAR_BAJA_CONFIANZA';\n  prioridad = 1;\n}\n\nreturn [\n  {\n    json: {\n      status: 'procesado',\n      pipeline: ['AgentePercepcion', 'AgenteAnalisis', 'AgenteRiesgo', 'AgenteAccion', 'AgenteMemoria', 'AgenteInterfazHumana'],\n      agente: data.agente,\n      version: data.version,\n      entrada: data.entrada,\n      contexto: data.contexto,\n      tracking: {},\n      memoria: data.memoria,\n      resultado: data.resultado,\n      decision: {\n        accion,\n        accion_tomada: accion,\n        prioridad,\n        notificar,\n        canales,\n        guardar_en_supabase: true,\n        requiere_revision_humana: requiereRevisionHumana,\n        estado_revision_humana: estadoRevisionHumana,\n        acciones_humanas_permitidas: requiereRevisionHumana ? accionesHumanas : [],\n        automatizacion_bloqueada: automatizacionBloqueada,\n        review_id: reviewId\n      },\n      persistencia: {\n        camara_id: data.entrada.camara,\n        objeto: data.entrada.objeto,\n        confianza: data.entrada.confianza,\n        score_riesgo: data.resultado.score_riesgo,\n        nivel_riesgo: data.resultado.nivel_riesgo,\n        accion_tomada: accion,\n        alertas_previas_24h: data.memoria.alertas_previas_24h,\n        detected_at: data.entrada.hora,\n        box: data.entrada.box,\n        contexto: data.contexto,\n        tracking: {},\n        memoria: data.memoria,\n        requiere_revision_humana: requiereRevisionHumana,\n        estado_revision_humana: estadoRevisionHumana,\n        review_id: reviewId\n      },\n      mensaje: accion + ': ' + riesgo + ' con score ' + data.resultado.score_riesgo,\n      siguientes_agentes: {\n        interfaz_humana: requiereRevisionHumana ? 'telegram_supervisor_pendiente' : 'no_requerida',\n        prediccion_ml: 'pendiente_fase_siguiente',\n        dashboard: 'listo_para_realtime'\n      },\n      procesado_en: new Date().toISOString()\n    }\n  }\n];"
       },
       "id": "cb399534-06df-4f42-a103-e688b275d3d0",
       "name": "AgenteAccion - Preparar Respuesta",
@@ -70,9 +70,120 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
       "position": [
+        700,
+        80
+      ]
+    },
+    {
+      "id": "b64053fb-6fd3-4b7d-9d6f-0d86fb79d231",
+      "name": "Requiere Revision Humana?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
         140,
         0
-      ]
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "requiere-revision-humana",
+              "leftValue": "={{$json.decision.requiere_revision_humana}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2d532f9a-cc1b-48bd-a90c-2f2fb64c5980",
+      "name": "AgenteInterfazHumana - Preparar Telegram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        -180
+      ],
+      "parameters": {
+        "jsCode": "const data = $json;\nconst risk = data.resultado?.nivel_riesgo ?? \"BAJO\";\nconst event = data.entrada ?? {};\nconst tracking = data.tracking ?? {};\nconst decision = data.decision ?? {};\nconst score = data.resultado?.score_riesgo ?? 0;\nconst reviewRequired = Boolean(\n  decision.requiere_revision_humana ?? decision.requires_human_review,\n);\nconst reviewStatus = decision.estado_revision_humana ?? decision.human_review_status ?? \"NO_REQUERIDA\";\nconst reviewId = data.persistencia?.review_id ?? decision.review_id ?? data.review_id ?? \"\";\nconst legacyTrackId = tracking.track_id ?? tracking.person_id ?? \"\";\nconst reviewKey = sanitizeKey(reviewId || legacyTrackId || `${event.camara ?? \"PC-01\"}_${event.objeto ?? \"unknown\"}_${event.hora ?? Date.now()}`);\nconst factors = (data.resultado?.factores ?? [])\n  .slice(-5)\n  .map((factor) => `- ${escapeHtml(factor.code)}: ${escapeHtml(factor.detail)}`)\n  .join(\"\\n\");\n\nfunction sanitizeKey(value) {\n  const safe = String(value).replace(/[^a-zA-Z0-9_-]/g, \"\").slice(0, 40);\n  return safe || \"sin_evento\";\n}\n\nfunction escapeHtml(value) {\n  return String(value ?? \"\")\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace(/>/g, \"&gt;\");\n}\n\nconst text = [\n  `<b>SentinelAI - Revision ${escapeHtml(risk)}</b>`,\n  `Accion: ${escapeHtml(decision.accion_tomada ?? decision.accion ?? \"REGISTRAR_EVENTO\")}`,\n  `Revision humana: ${escapeHtml(reviewStatus)}`,\n  `Camara: ${escapeHtml(event.camara ?? \"PC-01\")}`,\n  `Objeto: ${escapeHtml(event.objeto ?? \"unknown\")} (${escapeHtml(event.confianza ?? 0)})`,\n  `Score: ${escapeHtml(score)}`,\n  data.resultado?.resumen_ia ? `IA: ${escapeHtml(data.resultado.resumen_ia)}` : null,\n  factors ? `Factores:\\n${factors}` : null,\n].filter(Boolean).join(\"\\n\");\n\nreturn [\n  {\n    json: {\n      text,\n      parse_mode: \"HTML\",\n      disable_notification: ![\"CRITICO\", \"ALTO\"].includes(risk),\n      reply_markup: reviewRequired\n        ? {\n            inline_keyboard: [\n              [\n                { text: \"Confirmar amenaza\", callback_data: `sentinel:confirm:${reviewKey}` },\n                { text: \"Falso positivo\", callback_data: `sentinel:false:${reviewKey}` },\n              ],\n              [\n                { text: \"Mas revision\", callback_data: `sentinel:review:${reviewKey}` },\n              ],\n            ],\n          }\n        : undefined,\n      review_context: {\n        review_id: reviewKey,\n        tracking_id: legacyTrackId || null,\n        camara_id: event.camara ?? \"PC-01\",\n        objeto: event.objeto ?? \"unknown\",\n        requires_human_review: reviewRequired,\n        human_review_status: reviewStatus,\n        risk,\n        score,\n      },\n    },\n  },\n];\n"
+      }
+    },
+    {
+      "id": "37cd851e-34f4-4a7d-b18f-34d7cd5c7f21",
+      "name": "Telegram Supervisor - Enviar Validacion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        -180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{$env.SENTINEL_TELEGRAM_BOT_TOKEN}}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({ chat_id: $env.SENTINEL_TELEGRAM_CHAT_ID, text: $json.text, parse_mode: $json.parse_mode, disable_notification: $json.disable_notification, reply_markup: $json.reply_markup })}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "59d4dc3c-9b29-4c57-b23b-5400e363fc76",
+      "name": "Webhook - Callback Telegram Supervisor",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -980,
+        420
+      ],
+      "webhookId": "sentinel-telegram-callback",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sentinel-telegram-callback",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "a70c0105-31f7-4994-a27b-40d930c4bc8e",
+      "name": "AgenteInterfazHumana - Procesar Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -700,
+        420
+      ],
+      "parameters": {
+        "jsCode": "const payload = $json.body ?? $json;\nconst callback = payload.callback_query ?? payload.callback ?? {};\nconst callbackData = String(callback.data ?? payload.callback_data ?? \"\");\nconst parts = callbackData.split(\":\");\n\nconst actionMap = {\n  confirm: {\n    human_label: \"real_threat\",\n    estado_revision_humana: \"CONFIRMADA\",\n    accion_final: \"ACTIVAR_PROTOCOLO\",\n    alimentar_entrenamiento: true,\n  },\n  false: {\n    human_label: \"false_positive\",\n    estado_revision_humana: \"FALSO_POSITIVO\",\n    accion_final: \"CERRAR_EVENTO\",\n    alimentar_entrenamiento: true,\n  },\n  review: {\n    human_label: \"needs_more_review\",\n    estado_revision_humana: \"REQUIERE_MAS_REVISION\",\n    accion_final: \"SOLICITAR_MAS_CONTEXTO\",\n    alimentar_entrenamiento: false,\n  },\n};\n\nconst actionKey = parts[0] === \"sentinel\" ? parts[1] ?? \"\" : \"\";\nconst reviewId = parts[0] === \"sentinel\" ? parts[2] ?? \"\" : payload.review_id ?? \"\";\nconst trackingId = payload.tracking_id ?? \"\";\nconst selected = actionMap[actionKey] ?? {\n  human_label: \"unknown\",\n  estado_revision_humana: \"DESCONOCIDA\",\n  accion_final: \"REVISAR_MANUALMENTE\",\n  alimentar_entrenamiento: false,\n};\n\nreturn [\n  {\n    json: {\n      source: \"telegram_supervisor\",\n      callback_data: callbackData,\n      review_id: reviewId,\n      tracking_id: trackingId,\n      answer_callback_query: {\n        callback_query_id: callback.id ?? payload.callback_query_id ?? null,\n        text: `SentinelAI: ${selected.estado_revision_humana}`,\n        show_alert: false,\n      },\n      supervisor: {\n        user_id: callback.from?.id ?? payload.user_id ?? null,\n        username: callback.from?.username ?? payload.username ?? null,\n        decided_at: new Date().toISOString(),\n        ...selected,\n      },\n      persistencia_feedback: {\n        review_id: reviewId,\n        tracking_id: trackingId,\n        camara_id: payload.camara_id ?? null,\n        detection_event_id: payload.detection_event_id ?? null,\n        human_label: selected.human_label,\n        estado_revision_humana: selected.estado_revision_humana,\n        accion_final: selected.accion_final,\n        supervisor_user_id: callback.from?.id ?? payload.user_id ?? null,\n        supervisor_username: callback.from?.username ?? payload.username ?? null,\n        alimentar_entrenamiento: selected.alimentar_entrenamiento,\n        raw_callback: callbackData,\n        decided_at: new Date().toISOString(),\n      },\n    },\n  },\n];\n"
+      }
+    },
+    {
+      "id": "f957662f-fbb1-4c85-b1a0-9bd400d2eb2c",
+      "name": "Responder Callback Telegram",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -420,
+        420
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {
+          "responseCode": 200
+        }
+      }
     }
   ],
   "pinData": {},
@@ -114,7 +225,63 @@
       "main": [
         [
           {
+            "node": "Requiere Revision Humana?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requiere Revision Humana?": {
+      "main": [
+        [
+          {
             "node": "Responder a AgentePercepcion",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AgenteInterfazHumana - Preparar Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder a AgentePercepcion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AgenteInterfazHumana - Preparar Telegram": {
+      "main": [
+        [
+          {
+            "node": "Telegram Supervisor - Enviar Validacion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Callback Telegram Supervisor": {
+      "main": [
+        [
+          {
+            "node": "AgenteInterfazHumana - Procesar Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AgenteInterfazHumana - Procesar Callback": {
+      "main": [
+        [
+          {
+            "node": "Responder Callback Telegram",
             "type": "main",
             "index": 0
           }
@@ -126,7 +293,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "bd00fc5a-7da2-49c8-9a76-ece70f929df7",
+  "versionId": "sentinelai-human-interface-v1",
   "meta": {
     "templateCredsSetupCompleted": true
   },

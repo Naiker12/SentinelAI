@@ -1,5 +1,2 @@
-person
-knife
-gun
-backpack
-cell_phone
+NonViolence
+Violence

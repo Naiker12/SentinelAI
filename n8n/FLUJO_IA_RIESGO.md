@@ -4,21 +4,44 @@ Este flujo usa IA como analista contextual, pero la decision final la valida
 el motor de reglas con historial y limites. Para riesgos `MEDIO`, `ALTO` y
 `CRITICO`, la accion final queda bloqueada hasta que un supervisor humano valide.
 
-## Orden recomendado
+## Flujo importable actual
 
 ```text
-AgentePercepcion_Webhook
+Webhook - Evento Percepcion
+  -> Normalizar Evento
+  -> AgenteRiesgo - Score Hibrido
+  -> AgenteAccion - Preparar Respuesta
+  -> Requiere Revision Humana?
+      true:
+        -> Responder a AgentePercepcion
+        -> AgenteInterfazHumana - Preparar Telegram
+        -> Telegram Supervisor - Enviar Validacion
+      false:
+        -> Responder a AgentePercepcion
+
+Webhook - Callback Telegram Supervisor
+  -> AgenteInterfazHumana - Procesar Callback
+  -> Responder Callback Telegram
+```
+
+El workflow `n8n/AgenteAnalisis.workflow.json` ya contiene estos nodos. Python recibe
+respuesta rapido por `Responder a AgentePercepcion`; la validacion por Telegram queda
+como rama paralela/asíncrona cuando `decision.requiere_revision_humana=true`.
+
+## Flujo IA extendido opcional
+
+Si quieres activar LLM/Groq y memoria externa, usa los snippets de `n8n/code/`
+como expansion del flujo anterior:
+
+```text
+Webhook - Evento Percepcion
   -> Preparar_Datos
   -> AgenteAnalisis_IA
   -> Parsear_JSON_LLM
-  -> Umbral_Confianza_IF
-    true  -> Consultar_Historial_Sheets -> Calcular_Riesgo_Code
-    false -> Solicitar_Validacion_Telegram -> Wait_Timeout -> Consultar_Historial_Sheets
-  -> Nivel_Riesgo_Switch
-    CRITICO -> Telegram_Supervisor_Urgente -> Esperar_Callback -> Procesar_Respuesta_Supervisor -> Accion_Final -> Registrar_Memoria -> Respond_to_Webhook
-    ALTO    -> Telegram_Supervisor -> Esperar_Callback -> Procesar_Respuesta_Supervisor -> Accion_Final -> Registrar_Memoria -> Respond_to_Webhook
-    MEDIO   -> Telegram_Supervisor -> Esperar_Callback_O_Timeout -> Registrar_Memoria -> Respond_to_Webhook
-    BAJO    -> Registrar_Memoria_Sheets -> Respond_to_Webhook
+  -> Consultar_Historial
+  -> Calcular_Riesgo_Code
+  -> AgenteInterfazHumana / Telegram
+  -> Responder a AgentePercepcion
 ```
 
 ## Codigo por nodo
@@ -135,23 +158,29 @@ Rutas recomendadas:
 {
   "inline_keyboard": [
     [
-      {"text": "Confirmar amenaza", "callback_data": "sentinel:confirm:TRACK"},
-      {"text": "Falso positivo", "callback_data": "sentinel:false:TRACK"}
+      {"text": "Confirmar amenaza", "callback_data": "sentinel:confirm:REVIEW_ID"},
+      {"text": "Falso positivo", "callback_data": "sentinel:false:REVIEW_ID"}
     ],
     [
-      {"text": "Mas revision", "callback_data": "sentinel:review:TRACK"}
+      {"text": "Mas revision", "callback_data": "sentinel:review:REVIEW_ID"}
     ]
   ]
 }
 ```
 
-El bot debe tener un segundo webhook para callbacks de Telegram. Ese webhook usa
+El workflow ya incluye un segundo webhook para callbacks de Telegram:
+
+```text
+http://localhost:5678/webhook/sentinel-telegram-callback
+```
+
+Ese webhook usa
 `Procesar_Respuesta_Supervisor_Telegram.js` y devuelve:
 
 ```json
 {
   "source": "telegram_supervisor",
-  "tracking_id": "gun_0001",
+  "review_id": "PC01_knife_20260527",
   "supervisor": {
     "human_label": "real_threat",
     "estado_revision_humana": "CONFIRMADA",
@@ -160,6 +189,10 @@ El bot debe tener un segundo webhook para callbacks de Telegram. Ese webhook usa
   }
 }
 ```
+
+Configura ese URL como webhook del bot de Telegram para recibir los botones inline.
+El envio de mensajes usa `SENTINEL_TELEGRAM_BOT_TOKEN` y
+`SENTINEL_TELEGRAM_CHAT_ID`.
 
 Reglas de accion final:
 

@@ -6,7 +6,7 @@ MVP inicial de `AgentePercepcion`: camara local, deteccion con YOLOv8, eventos J
 
 - Python
 - OpenCV
-- YOLOv8 con `ultralytics`
+- YOLO/Ultralytics con modelo entrenado `proyecto_violence_v4/.../weights/best.pt`
 - FastAPI
 - Supabase/Postgres
 - Prisma para migraciones
@@ -152,17 +152,14 @@ El estado actual y roadmap estan en `docs/ESTADO_ACTUAL.md`.
 
 ## Configuracion importante
 
-La variable `SENTINEL_CLASSES` controla que objetos generan eventos. Para el primer MVP se recomienda dejar solo:
+La variable `SENTINEL_CLASSES` controla que clases generan eventos. Con el modelo de violencia entrenado en Google Colab debe quedar:
 
 ```env
-SENTINEL_CLASSES=person
+SENTINEL_MODEL=D:\SentinelAI\proyecto_violence_v4\entrenamiento_violence-3\weights\best.pt
+SENTINEL_CLASSES=violence,nonviolence
 ```
 
-Luego puedes ampliar:
-
-```env
-SENTINEL_CLASSES=person,car,backpack,cell phone,knife,gun
-```
+El modelo reporta las clases `NonViolence` y `Violence`; el sistema las normaliza internamente como `nonviolence` y `violence`.
 
 ## n8n
 
@@ -189,13 +186,7 @@ El agente enviara un JSON similar a:
     "iluminacion": "desconocida",
     "cantidad_personas": 1
   },
-  "tracking": {
-    "person_id": "person_0001",
-    "track_id": "person_0001",
-    "velocidad": 0,
-    "permanencia_segundos": 0,
-    "movimiento_erratico": false
-  },
+  "tracking": {},
   "memoria": {
     "eventos_previos_24h": 0,
     "alertas_previas_24h": 0
@@ -214,6 +205,7 @@ SentinelAI/
     detector.py
     events.py
     main.py
+    memory.py
   prisma/
   .env.example
   .gitignore

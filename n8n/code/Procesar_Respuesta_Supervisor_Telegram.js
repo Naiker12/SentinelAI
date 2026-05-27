@@ -24,8 +24,9 @@ const actionMap = {
   },
 };
 
-const actionKey = parts[1] ?? "";
-const trackingId = parts[2] ?? payload.tracking_id ?? "";
+const actionKey = parts[0] === "sentinel" ? parts[1] ?? "" : "";
+const reviewId = parts[0] === "sentinel" ? parts[2] ?? "" : payload.review_id ?? "";
+const trackingId = payload.tracking_id ?? "";
 const selected = actionMap[actionKey] ?? {
   human_label: "unknown",
   estado_revision_humana: "DESCONOCIDA",
@@ -38,7 +39,13 @@ return [
     json: {
       source: "telegram_supervisor",
       callback_data: callbackData,
+      review_id: reviewId,
       tracking_id: trackingId,
+      answer_callback_query: {
+        callback_query_id: callback.id ?? payload.callback_query_id ?? null,
+        text: `SentinelAI: ${selected.estado_revision_humana}`,
+        show_alert: false,
+      },
       supervisor: {
         user_id: callback.from?.id ?? payload.user_id ?? null,
         username: callback.from?.username ?? payload.username ?? null,
@@ -46,12 +53,18 @@ return [
         ...selected,
       },
       persistencia_feedback: {
+        review_id: reviewId,
         tracking_id: trackingId,
+        camara_id: payload.camara_id ?? null,
+        detection_event_id: payload.detection_event_id ?? null,
         human_label: selected.human_label,
         estado_revision_humana: selected.estado_revision_humana,
         accion_final: selected.accion_final,
+        supervisor_user_id: callback.from?.id ?? payload.user_id ?? null,
+        supervisor_username: callback.from?.username ?? payload.username ?? null,
         alimentar_entrenamiento: selected.alimentar_entrenamiento,
         raw_callback: callbackData,
+        decided_at: new Date().toISOString(),
       },
     },
   },

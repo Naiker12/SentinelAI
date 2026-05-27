@@ -1,0 +1,1124 @@
+SentinelAI - Inventario de agentes, librerias, algoritmos y plan de cambios
+Fecha: 2026-05-27
+
+Actualizacion aplicada en codigo
+================================
+
+Estado despues del cambio:
+
+- AgenteTracking fue eliminado del flujo activo y se borro agente_percepcion/tracking.py.
+- La memoria temporal se movio a agente_percepcion/memory.py.
+- El flujo de camara usa cooldown por camara+objeto, no por track_id.
+- SENTINEL_MODEL queda preparado para agente_percepcion/model/best.pt.
+- TrackingContext se conserva solo por compatibilidad con payloads antiguos.
+- El dashboard reemplaza la vista AgenteTracking por Interfaz Humana.
+- n8n queda preparado para review_id, validacion por Telegram y persistencia en human_reviews.
+
+Las secciones historicas de este documento explican por que se hizo este cambio y que dependencias fueron revisadas antes de eliminar el agente.
+
+Objetivo de este documento
+==========================
+
+Este TXT resume lo que existe hoy en SentinelAI antes de hacer cambios grandes.
+La idea es tener claro:
+
+- Que agentes existen realmente en codigo.
+- Que agentes existen como concepto/documentacion, pero no como modulo completo.
+- Que librerias usa cada parte.
+- Que algoritmos o reglas se estan usando.
+- Que hace cada agente.
+- Que se rompe o se debe ajustar si se elimina el AgenteTracking.
+- Como integrar un modelo YOLO propio entrenado en Google Colab, por ejemplo best.pt.
+
+Resumen ejecutivo
+=================
+
+SentinelAI hoy es un MVP funcional de vision artificial con:
+
+1. AgentePercepcion:
+   - Abre camara.
+   - Detecta objetos con YOLOv8 usando ultralytics.
+   - Dibuja bounding boxes con OpenCV.
+   - Genera eventos JSON.
+   - Ejecuta el analisis de riesgo antes de enviar el evento.
+   - Guarda eventos en Supabase.
+   - Envia eventos a n8n.
+
+2. AgenteTracking:
+   - Existe en codigo como agente/servicio simple dentro de agente_percepcion/tracking.py.
+   - No usa ByteTrack ni DeepSORT.
+   - Usa matching por IoU entre bounding boxes.
+   - Crea track_id por objeto.
+   - Calcula velocidad aproximada, permanencia y movimiento erratico.
+   - Tambien contiene una memoria temporal en RAM de eventos recientes.
+
+3. AgenteAnalisis:
+   - Existe como API FastAPI y como motor Python.
+   - Recibe evento, contexto, tracking y memoria.
+   - Calcula factores de riesgo con reglas deterministicas.
+   - Devuelve resultado y decision.
+
+4. AgenteRiesgo:
+   - No es un servicio separado.
+   - Esta implementado dentro de agente_analisis/risk_engine.py.
+   - Usa puntajes por objeto, confianza, horario, iluminacion, tracking y memoria.
+
+5. AgenteAccion:
+   - No es un servicio separado.
+   - Esta implementado dentro de agente_analisis/risk_engine.py, funcion decide_action.
+   - Decide si registrar, ignorar por baja confianza o solicitar revision humana.
+
+6. AgenteMemoria:
+   - Parcial.
+   - En Python existe una memoria temporal en RAM: EventMemory.
+   - En Supabase existe persistencia historica en detection_events.
+   - Todavia no hay un agente completo que consulte Supabase para memoria real por camara/zona antes del analisis.
+
+7. n8n:
+   - Orquesta.
+   - Puede normalizar payloads antiguos.
+   - Puede recalcular riesgo como fallback.
+   - Puede integrar IA/Groq para explicacion contextual.
+   - No debe reemplazar la decision final de Python si Python ya mando resultado/decision/persistencia.
+
+8. Dashboard:
+   - Existe en Streamlit.
+   - Lee Supabase si hay credenciales.
+   - Si no puede leer Supabase, genera datos simulados.
+   - Tiene paginas para resumen, riesgo, tracking, memoria y eventos en vivo.
+
+Stack general del proyecto
+==========================
+
+Python:
+
+- fastapi:
+  APIs locales de AgentePercepcion y AgenteAnalisis.
+
+- uvicorn:
+  Servidor ASGI para correr las APIs.
+
+- opencv-python:
+  Camara, lectura de frames, dibujo de bounding boxes, ventanas de preview.
+
+- ultralytics:
+  YOLOv8. Actualmente se usa un modelo generico como yolov8n.pt o el valor de SENTINEL_MODEL.
+
+- python-dotenv:
+  Carga variables desde .env.
+
+- requests:
+  Envio HTTP hacia webhook de n8n.
+
+- supabase:
+  Cliente Python para insertar y leer eventos en Supabase.
+
+- pandas:
+  Normalizacion y analisis de datos para dashboard.
+
+- plotly:
+  Graficas del dashboard.
+
+- streamlit:
+  Dashboard web local.
+
+- pytest:
+  Pruebas automaticas.
+
+Node / Prisma:
+
+- prisma:
+  Migraciones y schema de base de datos.
+
+- @prisma/client:
+  Cliente generado por Prisma, aunque el flujo principal actual de Python usa supabase-py para insertar/leer.
+
+Servicios externos o herramientas:
+
+- Supabase/Postgres:
+  Base de datos principal.
+
+- n8n:
+  Orquestacion, webhooks, memoria externa opcional, Telegram, Google Sheets y flujo de IA.
+
+- Groq o LLM en n8n:
+  Opcional. Su papel documentado es explicar/contextualizar, no detectar objetos ni decidir definitivamente.
+
+- Google Colab:
+  Recomendado para entrenar el modelo YOLO propio con GPU y exportar best.pt.
+
+Estructura principal
+====================
+
+agente_percepcion/
+------------------
+
+Archivos:
+
+- api.py
+- camera.py
+- config.py
+- detector.py
+- events.py
+- main.py
+- tracking.py
+
+Responsabilidad:
+
+Captura camara, deteccion visual, creacion de eventos, analisis previo, envio a n8n y guardado en Supabase.
+
+agente_analisis/
+----------------
+
+Archivos:
+
+- api.py
+- schemas.py
+- risk_engine.py
+
+Responsabilidad:
+
+Analizar eventos ya detectados, calcular riesgo y decidir accion.
+
+n8n/
+----
+
+Archivos clave:
+
+- AgenteAnalisis.workflow.json
+- code/Preparar_Datos_IA.js
+- code/Parsear_JSON_LLM.js
+- code/Calcular_Riesgo_Code.js
+- code/SYSTEM_PROMPT_AGENTE_ANALISIS_IA.md
+- code/Preparar_Alerta_Telegram.js
+- code/Procesar_Respuesta_Supervisor_Telegram.js
+- code/Preparar_Memoria_Sheets.js
+- code/Responder_Webhook_Final.js
+
+Responsabilidad:
+
+Webhook, orquestacion, enriquecimiento opcional con IA, alertas, memoria externa y respuesta al agente Python.
+
+dashboard/
+----------
+
+Archivos:
+
+- data.py
+- sentinel_dashboard.py
+- streamlit_app.py
+
+Responsabilidad:
+
+Visualizar eventos, riesgo, tracking, memoria y actividad reciente.
+
+dataset/
+--------
+
+Archivos:
+
+- data.yaml
+- classes.txt
+- README.md
+
+Responsabilidad:
+
+Organizar dataset propio para YOLO.
+
+Clases actuales:
+
+- person
+- knife
+- gun
+- backpack
+- cell_phone
+
+tools/
+------
+
+Herramientas:
+
+- capture_dataset.py:
+  Captura imagenes reales con webcam para crear dataset.
+
+- check_camera.py:
+  Diagnostico de camara en Windows.
+
+- test_n8n_webhook.py:
+  Prueba el webhook de n8n sin abrir camara.
+
+prisma/
+-------
+
+Archivos:
+
+- schema.prisma
+- migrations/
+
+Responsabilidad:
+
+Schema y migraciones de Supabase/Postgres.
+
+AgentePercepcion
+================
+
+Ubicacion:
+
+- agente_percepcion/main.py
+- agente_percepcion/detector.py
+- agente_percepcion/camera.py
+- agente_percepcion/events.py
+- agente_percepcion/config.py
+- agente_percepcion/api.py
+
+Librerias que usa:
+
+- OpenCV / cv2:
+  Leer camara, configurar backend, mostrar ventana, dibujar bounding boxes.
+
+- ultralytics:
+  Cargar YOLO y ejecutar prediccion.
+
+- python-dotenv:
+  Leer .env.
+
+- requests:
+  Enviar eventos al webhook de n8n.
+
+- supabase:
+  Insertar y consultar eventos.
+
+- FastAPI:
+  API local del agente.
+
+Algoritmo de deteccion:
+
+- YOLOv8 mediante ultralytics.YOLO.
+- Modelo actual por defecto: yolov8n.pt.
+- Modelo configurable con SENTINEL_MODEL.
+- Confianza configurable con SENTINEL_CONFIDENCE.
+- Clases permitidas configurables con SENTINEL_CLASSES.
+
+Flujo interno en main.py:
+
+1. Carga configuracion desde .env.
+2. Crea YoloDetector.
+3. Crea SupabaseEventStore.
+4. Crea N8nClient.
+5. Crea ObjectTracker.
+6. Crea EventMemory.
+7. Abre camara con Camera.
+8. Lee frame.
+9. Ejecuta YOLO.
+10. Ejecuta tracking sobre detecciones.
+11. Decide si emitir evento con should_emit_event.
+12. Construye DetectionEvent.
+13. Ejecuta analyze_event del AgenteAnalisis.
+14. Convierte el evento a payload enriquecido.
+15. Envia a n8n.
+16. Guarda en Supabase.
+17. Dibuja detecciones en pantalla.
+
+Datos que produce:
+
+- objeto
+- confianza
+- hora
+- camara
+- riesgo basico
+- box
+- imagen opcional
+- contexto
+- tracking
+- memoria
+- analisis enriquecido
+
+Endpoints de agente_percepcion/api.py:
+
+- GET /health
+- GET /events
+- POST /detect-once
+
+Nota importante:
+
+El endpoint /detect-once no usa el mismo flujo completo que main.py. Detecta una vez, envia a n8n y guarda, pero no agrega el mismo tracking/memoria/analisis previo que el flujo de camara en tiempo real.
+
+AgenteTracking
+==============
+
+Ubicacion:
+
+- agente_percepcion/tracking.py
+
+Estado real:
+
+Existe, pero es simple y propio. No es ByteTrack, no es DeepSORT, no usa ReID ni redes neuronales de seguimiento.
+
+Librerias que usa:
+
+- dataclasses
+- math.hypot
+- tipos internos de Detection
+
+Algoritmo usado:
+
+- Matching por IoU entre la bounding box nueva y tracks existentes.
+- Cada deteccion se compara contra tracks del mismo label.
+- Si el IoU supera el umbral, se reutiliza el track.
+- Si no supera el umbral, se crea un nuevo track_id.
+- El umbral viene de SENTINEL_TRACKING_IOU_THRESHOLD, por defecto 0.25.
+- Los tracks viejos se eliminan si no aparecen despues de max_lost_seconds, por defecto 10 segundos.
+
+Que calcula:
+
+- track_id:
+  Ejemplo: person_0001, knife_0001.
+
+- velocidad:
+  Calculada como cambio de centro de la bounding box dividido por tiempo transcurrido.
+  Es velocidad en pixeles/segundo aproximada, no velocidad fisica real.
+
+- permanencia_segundos:
+  Tiempo desde que el track fue visto por primera vez.
+
+- movimiento_erratico:
+  Se marca true si cambia la direccion del movimiento y la velocidad es alta.
+
+- es_nuevo:
+  Indica si el track acaba de crearse.
+
+Tambien contiene:
+
+- EventMemory:
+  Memoria en RAM de eventos previos dentro de una ventana de 24 horas.
+  Calcula eventos_previos_24h y alertas_previas_24h.
+
+- should_emit_event:
+  Controla si se debe emitir evento.
+  Emite siempre si el track es nuevo o si el objeto es knife, gun o scissors.
+  Para otros objetos aplica cooldown por track_id.
+
+Donde se usa:
+
+- agente_percepcion/main.py:
+  Importa ObjectTracker, EventMemory y should_emit_event.
+
+- agente_analisis/risk_engine.py:
+  Usa campos de tracking para sumar riesgo:
+  velocidad, movimiento_erratico, permanencia_segundos.
+
+- agente_analisis/schemas.py:
+  Define TrackingContext.
+
+- agente_percepcion/events.py:
+  Incluye tracking en payload y persistencia.
+
+- dashboard/data.py:
+  Extrae tracking del campo contexto.
+
+- dashboard/sentinel_dashboard.py:
+  Tiene pagina AgenteTracking y graficas basadas en track_id, permanencia, velocidad y movimiento_erratico.
+
+- n8n/code/Preparar_Datos_IA.js:
+  Normaliza tracking y lo mete al prompt de IA.
+
+- n8n/code/Calcular_Riesgo_Code.js:
+  Usa tracking.person_id, movimiento_erratico, permanencia y velocidad.
+
+- tests/test_agente_percepcion.py:
+  Tiene pruebas directas de ObjectTracker y should_emit_event.
+
+Impacto de eliminar AgenteTracking:
+
+No basta con borrar tracking.py. Si se elimina completamente, hay que ajustar:
+
+1. agente_percepcion/main.py:
+   - Quitar ObjectTracker.
+   - Quitar EventMemory si tambien se elimina esa memoria local.
+   - Reemplazar should_emit_event por cooldown por label/camara o emitir cada deteccion.
+   - Crear eventos sin tracking o con tracking vacio.
+
+2. agente_analisis/schemas.py:
+   - Se puede mantener TrackingContext con valores por defecto para compatibilidad.
+   - Recomendado: mantenerlo, aunque venga vacio.
+
+3. agente_analisis/risk_engine.py:
+   - Si tracking desaparece, los factores de velocidad, permanencia y movimiento erratico ya no aportaran puntos.
+   - El riesgo dependera mas de objeto, confianza, hora, iluminacion y memoria.
+
+4. agente_percepcion/events.py:
+   - Puede seguir aceptando tracking opcional.
+   - No hace falta romper contrato si tracking=None o tracking={}.
+
+5. n8n:
+   - Preparar_Datos_IA.js ya soporta tracking vacio con defaults.
+   - Calcular_Riesgo_Code.js ya soporta tracking vacio.
+   - Pero se perdera el extra de "objeto peligroso asociado a persona" cuando dependia de person_id.
+
+6. dashboard:
+   - La pagina AgenteTracking quedara vacia o con datos nulos.
+   - Conviene ocultarla, renombrarla o dejarla como "Tracking desactivado".
+
+7. tests:
+   - Borrar o cambiar pruebas de ObjectTracker.
+   - Ajustar pruebas que esperan tracking en payload.
+
+Recomendacion:
+
+Si el objetivo es usar un best.pt entrenado en Colab, no es obligatorio eliminar tracking. Son cosas distintas:
+
+- best.pt mejora deteccion de objetos.
+- tracking calcula persistencia/movimiento entre frames.
+
+Si se elimina tracking por simplificar, se puede hacer, pero el sistema perdera senales temporales importantes. La mejor opcion tecnica puede ser:
+
+- Fase 1: integrar best.pt y mantener tracking simple.
+- Fase 2: evaluar si tracking simple estorba.
+- Fase 3: si se elimina, hacerlo con compatibilidad: tracking vacio, no borrar campos del contrato todavia.
+
+AgenteAnalisis
+==============
+
+Ubicacion:
+
+- agente_analisis/api.py
+- agente_analisis/schemas.py
+- agente_analisis/risk_engine.py
+
+Librerias que usa:
+
+- FastAPI:
+  API HTTP.
+
+- Pydantic:
+  Modelos de entrada/salida y validacion.
+
+- datetime:
+  Tiempos de procesamiento.
+
+Algoritmo usado:
+
+- Motor de reglas deterministico llamado risk_rules_v1.
+- No usa machine learning todavia.
+- No usa LLM en Python.
+- Es testeable y predecible.
+
+Entrada:
+
+- evento:
+  objeto, confianza, hora, camara, box, imagen.
+
+- contexto:
+  zona, iluminacion, cantidad_personas.
+
+- tracking:
+  person_id, track_id, velocidad, permanencia_segundos, movimiento_erratico.
+
+- memoria:
+  eventos_previos_24h, alertas_previas_24h.
+
+Salida:
+
+- result:
+  risk_level, risk_score, nivel_riesgo, score_riesgo, suspicion_level, possible_behavior, factors, algorithm.
+
+- decision:
+  action, accion_tomada, priority, notify, channels, store_in_supabase, requires_human_review, human_review_status, allowed_human_actions, automation_locked.
+
+Endpoints:
+
+- GET /health
+- POST /analyze
+
+AgenteRiesgo
+============
+
+Ubicacion real:
+
+- agente_analisis/risk_engine.py
+
+No es un microservicio separado. Es la parte del motor que calcula puntaje.
+
+Algoritmo:
+
+1. Puntaje base por objeto:
+   - gun: 80
+   - knife: 60
+   - scissors: 40
+   - backpack: 18
+   - person: 10
+   - cell_phone: 5
+   - car: 8
+   - truck: 8
+   - motorcycle: 10
+
+2. Ajustes por confianza:
+   - confianza >= 0.90: +10
+   - confianza >= 0.70: +5
+   - confianza menor: -10
+
+3. Horario:
+   - hora nocturna entre 22:00 y 05:00: +15
+
+4. Iluminacion:
+   - baja/oscura/low/dark: +10
+
+5. Tracking:
+   - velocidad >= 7: +12
+   - movimiento_erratico: +15
+   - permanencia >= 15 minutos: +25
+   - permanencia >= 5 minutos: +10
+
+6. Memoria:
+   - alertas_previas_24h >= 2: +15
+   - eventos_previos_24h >= 10: +8
+
+7. El score final se limita entre 0 y 100.
+
+Clasificacion:
+
+- 0 a 29: BAJO
+- 30 a 69: MEDIO
+- 70 a 89: ALTO
+- 90 a 100: CRITICO
+
+Nota:
+
+En n8n/README.md hay una documentacion de rangos distinta para un flujo anterior:
+
+- 0-24 BAJO
+- 25-49 MEDIO
+- 50-79 ALTO
+- 80-100 CRITICO
+
+Pero el codigo Python actual usa:
+
+- >=90 CRITICO
+- >=70 ALTO
+- >=30 MEDIO
+- menor a 30 BAJO
+
+Si se busca consistencia, hay que actualizar la documentacion o n8n para que ambos usen los mismos rangos.
+
+AgenteAccion
+============
+
+Ubicacion real:
+
+- agente_analisis/risk_engine.py, funcion decide_action.
+
+Algoritmo:
+
+- Score >= 90:
+  SOLICITAR_VALIDACION_URGENTE
+  Prioridad 10
+  Notifica telegram_supervisor y dashboard_realtime
+  Requiere revision humana
+  Bloquea automatizacion
+
+- Score >= 70:
+  SOLICITAR_VALIDACION_HUMANA
+  Prioridad 8
+  Notifica telegram_supervisor y dashboard_realtime
+  Requiere revision humana
+  Bloquea automatizacion
+
+- Score >= 30:
+  SOLICITAR_REVISION_HUMANA
+  Prioridad 5
+  Notifica telegram_supervisor
+  Requiere revision humana
+  Bloquea automatizacion
+
+- Score < 30:
+  Si confianza < 0.5: IGNORAR_BAJA_CONFIANZA
+  Si confianza >= 0.5: REGISTRAR_EVENTO
+  No notifica
+  No requiere revision humana
+  No bloquea automatizacion
+
+Acciones humanas permitidas:
+
+- CONFIRMAR_AMENAZA
+- FALSO_POSITIVO
+- REQUIERE_MAS_REVISION
+
+AgenteMemoria
+=============
+
+Estado real:
+
+Hay memoria parcial en dos niveles.
+
+1. Memoria temporal en Python:
+   - EventMemory en agente_percepcion/tracking.py.
+   - Guarda en RAM conteos de eventos y alertas recientes.
+   - Se pierde cuando se cierra el proceso.
+
+2. Memoria persistente en Supabase:
+   - Tabla detection_events.
+   - Guarda eventos, riesgo, score, accion, contexto, tracking y campos de revision.
+
+No existe todavia:
+
+- Un agente Python que consulte Supabase antes de cada analisis para calcular memoria real por camara/zona.
+
+Recomendacion:
+
+Si se elimina tracking.py, mover EventMemory a otro archivo, por ejemplo:
+
+- agente_percepcion/memory.py
+
+o reemplazarla por memoria real consultando Supabase.
+
+n8n
+===
+
+Ubicacion:
+
+- n8n/
+
+Librerias/servicios:
+
+- n8n como plataforma visual.
+- JavaScript en nodos Code.
+- Groq/LLM opcional para analisis contextual.
+- Telegram opcional para supervisor.
+- Google Sheets opcional para memoria externa.
+
+Rol:
+
+- Recibir webhook.
+- Normalizar datos.
+- Ejecutar IA opcional.
+- Parsear y validar JSON del LLM.
+- Consultar historial externo si existe.
+- Calcular riesgo como fallback.
+- Preparar alertas.
+- Esperar callback humano.
+- Registrar memoria.
+- Responder al webhook.
+
+Regla importante:
+
+Si Python ya manda:
+
+- entrada
+- resultado
+- decision
+- persistencia
+
+n8n debe respetar ese resultado y no recalcular todo, salvo que sea un fallback controlado.
+
+IA/LLM en n8n
+=============
+
+Prompt:
+
+- n8n/code/SYSTEM_PROMPT_AGENTE_ANALISIS_IA.md
+
+Rol:
+
+- Analizar evidencia ya detectada.
+- Explicar contexto.
+- Sugerir nivel de riesgo.
+- No detectar objetos nuevos.
+- No inventar armas.
+- No tomar decision final.
+- No recomendar violencia.
+- Responder solo JSON valido.
+
+Salida esperada:
+
+- nivel_riesgo
+- score_sugerido
+- confianza_analisis
+- resumen
+- factores_ia
+- recomendar_subir_riesgo
+- requiere_revision_humana
+
+Dashboard
+=========
+
+Ubicacion:
+
+- dashboard/sentinel_dashboard.py
+- dashboard/data.py
+
+Librerias:
+
+- Streamlit
+- Pandas
+- Plotly
+- Supabase
+- python-dotenv
+
+Paginas:
+
+- Resumen General
+- AgenteRiesgo
+- AgenteTracking
+- AgenteMemoria
+- Eventos en Vivo
+
+Fuente de datos:
+
+- Supabase real si SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY existen.
+- Datos simulados si no hay conexion o credenciales.
+
+Campos que espera:
+
+- timestamp
+- camara_id
+- zona
+- objeto
+- confianza
+- score_riesgo
+- nivel_riesgo
+- accion_tomada
+- track_id
+- permanencia_s
+- velocidad
+- movimiento_erratico
+- eventos_previos_24h
+- resumen_ia
+- factores_ia
+
+Impacto si se elimina tracking:
+
+- track_id quedara null.
+- permanencia_s quedara null.
+- velocidad sera 0.0 o null.
+- movimiento_erratico sera false.
+- La pagina AgenteTracking tendra menos valor.
+
+Supabase / Prisma
+=================
+
+Tablas principales:
+
+1. camaras
+
+Campos:
+
+- id
+- codigo
+- nombre
+- ubicacion
+- activa
+- created_at
+
+2. detection_events
+
+Campos:
+
+- id
+- objeto
+- confianza
+- riesgo
+- detected_at
+- camara_id
+- box
+- imagen_url
+- ubicacion
+- score_riesgo
+- nivel_riesgo
+- accion_tomada
+- alertas_previas_24h
+- hora_dia
+- contexto
+- created_at
+
+3. human_reviews
+
+Campos:
+
+- id
+- detection_event_id
+- tracking_id
+- camara_id
+- estado_revision
+- human_label
+- accion_final
+- supervisor_user_id
+- supervisor_username
+- alimentar_entrenamiento
+- raw_callback
+- contexto
+- decided_at
+- created_at
+
+Nota:
+
+human_reviews tiene tracking_id. Si se elimina tracking, ese campo puede quedar null o debe cambiarse por detection_event_id/camara_id como referencia principal.
+
+Dataset y modelo propio
+=======================
+
+Ubicacion:
+
+- dataset/
+
+Clases actuales:
+
+- person
+- knife
+- gun
+- backpack
+- cell_phone
+
+Formato:
+
+- YOLO.
+
+Archivo dataset/data.yaml:
+
+- train: yolo/images/train
+- val: yolo/images/val
+- test: yolo/images/test
+
+Herramienta de captura:
+
+- tools/capture_dataset.py
+
+Escenarios de captura:
+
+- normal
+- objeto_sospechoso
+- objeto_no_sospechoso
+- pelea
+- robo
+
+Importante:
+
+normal, pelea y robo no son clases YOLO iniciales. Son escenarios/contextos.
+Las clases YOLO deben ser objetos fisicos claros.
+
+Entrenamiento en Google Colab
+=============================
+
+Entrenamiento recomendado con ultralytics:
+
+from ultralytics import YOLO
+
+model = YOLO("yolov8n.pt")
+model.train(data="dataset/data.yaml", epochs=50, imgsz=640)
+
+Resultado esperado:
+
+- best.pt
+
+Integracion en SentinelAI:
+
+1. Crear una carpeta para modelos, por ejemplo:
+   agente_percepcion/model/
+
+2. Copiar best.pt:
+   agente_percepcion/model/best.pt
+
+3. Cambiar .env:
+   SENTINEL_MODEL=agente_percepcion/model/best.pt
+
+4. Ajustar clases:
+   SENTINEL_CLASSES=person,knife,gun,backpack,cell_phone
+
+5. Probar:
+   python -m agente_percepcion.main
+
+6. Si se quiere probar sin camara continua:
+   uvicorn agente_percepcion.api:app --reload
+   POST /detect-once
+
+Nota:
+
+El best.pt reemplaza el detector generico, pero no reemplaza automaticamente tracking, riesgo, memoria ni n8n. Solo mejora que objetos se detectan.
+
+Variables .env importantes
+==========================
+
+Camara:
+
+- SENTINEL_CAMERA_INDEX
+- SENTINEL_CAMERA_BACKEND
+- SENTINEL_CAMERA_NAME
+- SENTINEL_CAMERA_WIDTH
+- SENTINEL_CAMERA_HEIGHT
+- SENTINEL_CAMERA_FPS
+- SENTINEL_CAMERA_FOURCC
+
+Modelo:
+
+- SENTINEL_MODEL
+- SENTINEL_CONFIDENCE
+- SENTINEL_CLASSES
+
+Eventos:
+
+- SENTINEL_EVENT_COOLDOWN_SECONDS
+- SENTINEL_TRACKING_IOU_THRESHOLD
+- SENTINEL_SAVE_IMAGES
+- SENTINEL_IMAGE_DIR
+
+Contexto:
+
+- SENTINEL_SCENE_ZONE
+- SENTINEL_SCENE_LIGHTING
+
+n8n:
+
+- SENTINEL_N8N_WEBHOOK_URL
+
+Supabase:
+
+- SUPABASE_URL
+- SUPABASE_SERVICE_ROLE_KEY
+- SUPABASE_DETECTION_EVENTS_TABLE
+- DATABASE_URL
+- DIRECT_URL
+
+Riesgos antes de eliminar Tracking
+==================================
+
+Si se elimina AgenteTracking sin preparar compatibilidad:
+
+1. Se pierden IDs persistentes por persona/objeto.
+2. Se pierde permanencia.
+3. Se pierde velocidad.
+4. Se pierde movimiento erratico.
+5. El cooldown actual por track_id deja de funcionar.
+6. Riesgo bajara en casos donde antes sumaban factores temporales.
+7. Dashboard de tracking queda vacio.
+8. human_reviews.tracking_id pierde utilidad.
+9. Tests existentes fallaran.
+10. n8n seguira funcionando, pero con menos contexto.
+
+Que NO se rompe si se hace con cuidado:
+
+- YOLO puede seguir detectando.
+- AgenteAnalisis puede seguir calculando riesgo con tracking por defecto.
+- Supabase puede seguir guardando eventos.
+- n8n puede seguir recibiendo payloads.
+- Dashboard puede seguir mostrando eventos generales.
+
+Plan recomendado para el cambio grande
+======================================
+
+Fase 1 - Congelar estado actual
+-------------------------------
+
+- Mantener este TXT como referencia.
+- Correr pruebas:
+  python -m pytest
+
+- Confirmar flujo end-to-end actual:
+  camara -> YOLO -> analisis -> n8n -> Supabase -> dashboard.
+
+Fase 2 - Integrar best.pt
+-------------------------
+
+- Crear carpeta:
+  agente_percepcion/model/
+
+- Poner el modelo:
+  agente_percepcion/model/best.pt
+
+- Actualizar .env:
+  SENTINEL_MODEL=agente_percepcion/model/best.pt
+  SENTINEL_CLASSES=person,knife,gun,backpack,cell_phone
+
+- Probar deteccion con camara.
+
+Fase 3 - Decidir sobre tracking
+-------------------------------
+
+Opcion A, recomendada:
+
+- Mantener tracking simple por ahora.
+- Cambiar solo el modelo.
+- Evaluar si best.pt mejora detecciones.
+- Despues decidir si tracking se reemplaza por otro metodo.
+
+Opcion B:
+
+- Desactivar tracking sin borrarlo.
+- Agregar variable:
+  SENTINEL_TRACKING_ENABLED=false
+
+- Si esta false, main.py manda tracking vacio/default.
+- Esto permite volver atras facil.
+
+Opcion C:
+
+- Eliminar tracking completamente.
+- Requiere cambios en main.py, tests, dashboard y posiblemente Prisma/n8n/documentacion.
+- Es la opcion con mas riesgo.
+
+Fase 4 - Si se elimina tracking, cambios minimos
+------------------------------------------------
+
+1. Mantener TrackingContext en schemas.py para compatibilidad.
+2. Enviar tracking={} o no enviar tracking en DetectionEvent.
+3. Quitar pagina AgenteTracking o mostrar "Tracking desactivado".
+4. Mover EventMemory a otro archivo si se quiere conservar memoria temporal.
+5. Cambiar should_emit_event por cooldown por objeto/camara.
+6. Ajustar risk_engine para no depender de tracking en casos criticos.
+7. Actualizar tests.
+8. Actualizar docs.
+
+Fase 5 - Memoria real
+---------------------
+
+Para compensar la perdida de tracking, conviene fortalecer memoria:
+
+- Consultar Supabase por camara/zona antes del analisis.
+- Calcular eventos_previos_24h.
+- Calcular alertas_previas_24h.
+- Usar historial real en vez de memoria RAM.
+
+Conclusiones
+============
+
+1. El sistema actual ya tiene una arquitectura multiagente parcial y funcional.
+
+2. El AgenteTracking existe en codigo, pero es un tracker simple por IoU, no un modelo avanzado.
+
+3. El modelo best.pt entrenado en Colab reemplaza/mejora YOLO, pero no reemplaza tracking. Son partes diferentes.
+
+4. Si se elimina tracking, el sistema seguira funcionando si se deja compatibilidad, pero perdera informacion temporal importante.
+
+5. La forma mas segura de avanzar es:
+   - Primero integrar best.pt.
+   - Probar deteccion.
+   - Luego desactivar tracking con una variable.
+   - Solo despues eliminar codigo si ya se confirmo que no se necesita.
+
+6. Antes de borrar, revisar especialmente:
+   - agente_percepcion/main.py
+   - agente_percepcion/tracking.py
+   - agente_analisis/risk_engine.py
+   - agente_analisis/schemas.py
+   - agente_percepcion/events.py
+   - dashboard/data.py
+   - dashboard/sentinel_dashboard.py
+   - n8n/code/Preparar_Datos_IA.js
+   - n8n/code/Calcular_Riesgo_Code.js
+   - prisma/schema.prisma
+   - tests/test_agente_percepcion.py
+   - tests/test_agente_analisis.py
+
+Checklist antes de borrar AgenteTracking
+========================================
+
+[ ] Ya se entreno best.pt en Google Colab.
+[ ] best.pt detecta mejor que yolov8n.pt en camara real.
+[ ] SENTINEL_MODEL apunta a best.pt.
+[ ] SENTINEL_CLASSES coincide con dataset/data.yaml.
+[ ] Se corrio python -m pytest.
+[ ] Se probo camara real.
+[ ] Se decidio si tracking se elimina, se desactiva o se reemplaza.
+[ ] n8n acepta payload sin tracking.
+[ ] AgenteAnalisis mantiene defaults si tracking viene vacio.
+[ ] Dashboard no falla con track_id null.
+[ ] Supabase acepta contexto sin tracking.
+[ ] Se actualizo documentacion.

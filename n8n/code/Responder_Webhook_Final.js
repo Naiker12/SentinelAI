@@ -8,11 +8,11 @@ return [
       version: data.version ?? "0.5.0",
       pipeline: data.pipeline ?? [
         "AgentePercepcion",
-        "AgenteTracking",
         "AgenteAnalisisIA",
         "AgenteRiesgo",
         "AgenteAccion",
         "AgenteMemoria",
+        "AgenteInterfazHumana",
       ],
       entrada: data.entrada,
       contexto: data.contexto,

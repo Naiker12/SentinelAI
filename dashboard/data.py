@@ -22,6 +22,8 @@ ACTIONS = {
     "CRITICO": "ALERTA_CRITICA",
 }
 RISK_BASE = {
+    "violence": 0.80,
+    "nonviolence": 0.05,
     "gun": 0.95,
     "knife": 0.80,
     "scissors": 0.50,
@@ -30,6 +32,9 @@ RISK_BASE = {
     "person": 0.20,
 }
 OBJECT_LABELS = {
+    "violence": "Violencia",
+    "nonviolence": "No violencia",
+    "non violence": "No violencia",
     "person": "Persona",
     "knife": "Cuchillo",
     "gun": "Pistola",
@@ -44,6 +49,9 @@ ACTION_LABELS = {
     "ENVIAR_ALERTA": "Enviar alerta",
     "ALERTA_CRITICA": "Alerta critica",
     "IGNORAR_BAJA_CONFIANZA": "Ignorar por baja confianza",
+    "SOLICITAR_REVISION_HUMANA": "Solicitar revision humana",
+    "SOLICITAR_VALIDACION_HUMANA": "Solicitar validacion humana",
+    "SOLICITAR_VALIDACION_URGENTE": "Validacion urgente",
 }
 LEVEL_LABELS = {
     "BAJO": "Bajo",
@@ -133,6 +141,10 @@ def generate_events(count: int = 300) -> pd.DataFrame:
                     else ""
                 ),
                 "factores_ia": [],
+                "requiere_revision_humana": level in {"MEDIO", "ALTO", "CRITICO"},
+                "estado_revision_humana": "PENDIENTE" if level in {"MEDIO", "ALTO", "CRITICO"} else "NO_REQUERIDA",
+                "automatizacion_bloqueada": level in {"MEDIO", "ALTO", "CRITICO"},
+                "review_id": f"{camera}_{obj}_{int(timestamp.timestamp())}",
                 "hora": hour,
                 "dia_semana": timestamp.strftime("%A"),
             }
@@ -185,6 +197,18 @@ def normalize_supabase_events(rows: list[dict]) -> pd.DataFrame:
         df["factores_ia"] = context_series.map(lambda value: _safe_dict(value).get("factores_ia"))
     if "eventos_previos_24h" not in df.columns:
         df["eventos_previos_24h"] = memory_series.map(lambda value: value.get("eventos_previos_24h", 0))
+    if "requiere_revision_humana" not in df.columns:
+        df["requiere_revision_humana"] = df["nivel_riesgo"].isin(["MEDIO", "ALTO", "CRITICO"])
+    if "estado_revision_humana" not in df.columns:
+        df["estado_revision_humana"] = context_series.map(
+            lambda value: _safe_dict(value).get("estado_revision_humana")
+        )
+    if "automatizacion_bloqueada" not in df.columns:
+        df["automatizacion_bloqueada"] = context_series.map(
+            lambda value: _safe_dict(value).get("automatizacion_bloqueada")
+        )
+    if "review_id" not in df.columns:
+        df["review_id"] = context_series.map(lambda value: _safe_dict(value).get("review_id"))
 
     df["hora"] = df.get("hora_dia")
     df["hora"] = pd.to_numeric(df["hora"], errors="coerce")
@@ -196,6 +220,12 @@ def normalize_supabase_events(rows: list[dict]) -> pd.DataFrame:
     df["movimiento_erratico"] = df["movimiento_erratico"].fillna(False).astype(bool)
     df["eventos_previos_24h"] = pd.to_numeric(df["eventos_previos_24h"], errors="coerce").fillna(0).astype(int)
     df["resumen_ia"] = df["resumen_ia"].fillna("")
+    df["requiere_revision_humana"] = df["requiere_revision_humana"].fillna(False).astype(bool)
+    df["estado_revision_humana"] = df["estado_revision_humana"].fillna(
+        df["requiere_revision_humana"].map(lambda value: "PENDIENTE" if value else "NO_REQUERIDA")
+    )
+    df["automatizacion_bloqueada"] = df["automatizacion_bloqueada"].fillna(False).astype(bool)
+    df["review_id"] = df["review_id"].fillna("")
     df["camara_id"] = df.get("camara_id", "PC-01")
     df["objeto"] = df.get("objeto", "unknown")
     df["objeto_nombre"] = df["objeto"].map(OBJECT_LABELS).fillna(df["objeto"])
@@ -225,6 +255,10 @@ def dashboard_columns() -> list[str]:
         "eventos_previos_24h",
         "resumen_ia",
         "factores_ia",
+        "requiere_revision_humana",
+        "estado_revision_humana",
+        "automatizacion_bloqueada",
+        "review_id",
         "hora",
         "dia_semana",
     ]

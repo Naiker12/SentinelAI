@@ -4,8 +4,5 @@ val: yolo/images/val
 test: yolo/images/test
 
 names:
-  0: person
-  1: knife
-  2: gun
-  3: backpack
-  4: cell_phone
+  0: NonViolence
+  1: Violence

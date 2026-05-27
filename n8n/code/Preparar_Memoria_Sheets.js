@@ -13,6 +13,7 @@ return [
       score_riesgo: persistence.score_riesgo ?? data.resultado?.score_riesgo ?? 0,
       nivel_riesgo: persistence.nivel_riesgo ?? data.resultado?.nivel_riesgo ?? "BAJO",
       accion_tomada: persistence.accion_tomada ?? data.decision?.accion_tomada ?? "REGISTRAR_EVENTO",
+      review_id: persistence.review_id ?? data.decision?.review_id ?? data.review_id ?? "",
       track_id: tracking.track_id ?? "",
       person_id: tracking.person_id ?? "",
       velocidad: tracking.velocidad ?? 0,

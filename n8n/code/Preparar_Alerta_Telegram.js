@@ -8,23 +8,34 @@ const reviewRequired = Boolean(
   decision.requiere_revision_humana ?? decision.requires_human_review,
 );
 const reviewStatus = decision.estado_revision_humana ?? decision.human_review_status ?? "NO_REQUERIDA";
-const trackId = tracking.track_id ?? tracking.person_id ?? "sin_track";
-const reviewKey = String(trackId).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "sin_track";
+const reviewId = data.persistencia?.review_id ?? decision.review_id ?? data.review_id ?? "";
+const legacyTrackId = tracking.track_id ?? tracking.person_id ?? "";
+const reviewKey = sanitizeKey(reviewId || legacyTrackId || `${event.camara ?? "PC-01"}_${event.objeto ?? "unknown"}_${event.hora ?? Date.now()}`);
 const factors = (data.resultado?.factores ?? [])
   .slice(-5)
-  .map((factor) => `- ${factor.code}: ${factor.detail}`)
+  .map((factor) => `- ${escapeHtml(factor.code)}: ${escapeHtml(factor.detail)}`)
   .join("\n");
 
+function sanitizeKey(value) {
+  const safe = String(value).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
+  return safe || "sin_evento";
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 const text = [
-  `SentinelAI - Revision ${risk}`,
-  `Accion: ${decision.accion_tomada ?? decision.accion ?? "REGISTRAR_EVENTO"}`,
-  `Revision humana: ${reviewStatus}`,
-  `Camara: ${event.camara ?? "PC-01"}`,
-  `Objeto: ${event.objeto ?? "unknown"} (${event.confianza ?? 0})`,
-  `Score: ${score}`,
-  tracking.person_id ? `Persona asociada: ${tracking.person_id}` : null,
-  tracking.track_id ? `Track: ${tracking.track_id}` : null,
-  data.resultado?.resumen_ia ? `IA: ${data.resultado.resumen_ia}` : null,
+  `<b>SentinelAI - Revision ${escapeHtml(risk)}</b>`,
+  `Accion: ${escapeHtml(decision.accion_tomada ?? decision.accion ?? "REGISTRAR_EVENTO")}`,
+  `Revision humana: ${escapeHtml(reviewStatus)}`,
+  `Camara: ${escapeHtml(event.camara ?? "PC-01")}`,
+  `Objeto: ${escapeHtml(event.objeto ?? "unknown")} (${escapeHtml(event.confianza ?? 0)})`,
+  `Score: ${escapeHtml(score)}`,
+  data.resultado?.resumen_ia ? `IA: ${escapeHtml(data.resultado.resumen_ia)}` : null,
   factors ? `Factores:\n${factors}` : null,
 ].filter(Boolean).join("\n");
 
@@ -48,10 +59,14 @@ return [
           }
         : undefined,
       review_context: {
-        tracking_id: trackId,
+        review_id: reviewKey,
+        tracking_id: legacyTrackId || null,
+        camara_id: event.camara ?? "PC-01",
+        objeto: event.objeto ?? "unknown",
         requires_human_review: reviewRequired,
         human_review_status: reviewStatus,
         risk,
+        score,
       },
     },
   },

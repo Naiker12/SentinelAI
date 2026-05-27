@@ -7,6 +7,10 @@ __pycache__/
 *.db
 node_modules/
 runs/
+Ultralytics/
+.ultralytics/
+.matplotlib/
+proyecto_violence_v4/
 agente_percepcion/model/*.pt
 capturas/
 dataset/raw/**/*

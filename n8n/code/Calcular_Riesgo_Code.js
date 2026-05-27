@@ -5,7 +5,7 @@ if (parsed.resultado && parsed.decision && parsed.persistencia) {
 const historyRows = $input.all().map((item) => item.json ?? {});
 
 const riskRank = { BAJO: 0, MEDIO: 1, ALTO: 2, CRITICO: 3 };
-const dangerousObjects = new Set(["gun", "knife", "scissors"]);
+const dangerousObjects = new Set(["gun", "knife", "scissors", "violence"]);
 
 function clamp(value, min, max, fallback) {
   const parsedNumber = Number(value);
@@ -25,6 +25,14 @@ function normalizeObject(value) {
     cellphone: "cell_phone",
     mobile_phone: "cell_phone",
     phone: "cell_phone",
+    non_violence: "nonviolence",
+    "non-violence": "nonviolence",
+    no_violence: "nonviolence",
+    "no-violence": "nonviolence",
+    normal: "nonviolence",
+    pelea: "violence",
+    fight: "violence",
+    fighting: "violence",
   };
   return aliases[normalized] ?? normalized;
 }
@@ -121,7 +129,6 @@ const factors = [...(parsed.resultado?.factores ?? [])];
 let score = clamp(parsed.resultado?.score, 0, 100, 0);
 const object = normalizeObject(parsed.entrada?.objeto);
 const confidence = clamp(parsed.entrada?.confianza, 0, 1, 0);
-const tracking = parsed.tracking ?? {};
 const context = parsed.contexto ?? {};
 
 if (previousAlerts24h >= 3) {
@@ -149,30 +156,12 @@ if (previousEvents24h >= 20) {
   );
 }
 
-if (dangerousObjects.has(object) && tracking.person_id) {
-  score += addFactor(
-    factors,
-    10,
-    "objeto_peligroso_con_persona",
-    `Objeto peligroso asociado a ${tracking.person_id}.`,
-  );
-}
-
 if (object === "person" && !dangerousObjects.has(object) && confidence < 0.7) {
   score -= addFactor(
     factors,
     8,
     "persona_baja_confianza",
     "Persona con baja confianza: se reduce riesgo para evitar falsa alarma.",
-  );
-}
-
-if (context.noche && tracking.movimiento_erratico) {
-  score += addFactor(
-    factors,
-    10,
-    "noche_movimiento_erratico",
-    "Movimiento erratico en horario nocturno.",
   );
 }
 
@@ -243,6 +232,7 @@ return [
         factores_ia: parsed.resultado?.factores_ia ?? [],
         requiere_revision_humana: decision.requiere_revision_humana,
         estado_revision_humana: decision.estado_revision_humana,
+        review_id: parsed.persistencia?.review_id ?? parsed.review_id,
       },
       mensaje: `${decision.accion}: ${risk} con score ${scoreRisk}`,
       procesado_en: new Date().toISOString(),

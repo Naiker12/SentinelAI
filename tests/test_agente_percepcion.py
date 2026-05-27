@@ -5,7 +5,7 @@ import numpy as np
 from agente_percepcion.config import _classes
 from agente_percepcion.detector import Detection, draw_detections, normalize_label
 from agente_percepcion.events import DetectionEvent, N8nClient, risk_for_label
-from agente_percepcion.tracking import ObjectTracker, should_emit_event
+from agente_percepcion.memory import should_emit_detection
 from agente_analisis.risk_engine import analyze_event
 
 
@@ -49,6 +49,8 @@ def test_detection_event_maps_n8n_persistence_to_supabase_row() -> None:
 
 
 def test_risk_levels() -> None:
+    assert risk_for_label("Violence") == "alto"
+    assert risk_for_label("NonViolence") == "bajo"
     assert risk_for_label("knife") == "alto"
     assert risk_for_label("gun") == "alto"
     assert risk_for_label("pistol") == "alto"
@@ -67,6 +69,8 @@ def test_detection_labels_normalize_weapon_aliases() -> None:
     assert normalize_label("firearm") == "gun"
     assert normalize_label("pistola") == "gun"
     assert normalize_label("cell_phone") == "cell phone"
+    assert normalize_label("NonViolence") == "nonviolence"
+    assert normalize_label("pelea") == "violence"
 
 
 def test_allowed_classes_normalize_to_detector_labels() -> None:
@@ -163,34 +167,13 @@ def test_detection_event_can_emit_precomputed_analysis_payload() -> None:
     assert payload["persistencia"]["tracking"]["person_id"] == "person_0001"
 
 
-def test_tracker_separates_people_with_different_boxes() -> None:
-    tracker = ObjectTracker()
-
-    tracked = tracker.update(
-        [
-            Detection(label="person", confidence=0.9, box=(0, 0, 100, 100)),
-            Detection(label="person", confidence=0.88, box=(300, 0, 400, 100)),
-        ],
-        now=1.0,
-    )
-
-    assert [item.snapshot.track_id for item in tracked] == ["person_0001", "person_0002"]
-    assert all(item.snapshot.es_nuevo for item in tracked)
-
-
-def test_event_gate_uses_track_id_not_only_label() -> None:
+def test_event_gate_uses_label_and_camera_cooldown() -> None:
     last_event_at: dict[str, float] = {}
-    tracker = ObjectTracker()
-    first, second = tracker.update(
-        [
-            Detection(label="person", confidence=0.9, box=(0, 0, 100, 100)),
-            Detection(label="person", confidence=0.88, box=(300, 0, 400, 100)),
-        ],
-        now=1.0,
-    )
 
-    assert should_emit_event(first.snapshot, first.detection.label, last_event_at, 1.0, 5)
-    assert should_emit_event(second.snapshot, second.detection.label, last_event_at, 1.0, 5)
+    assert should_emit_detection("person", "PC-01", last_event_at, 1.0, 5)
+    assert not should_emit_detection("person", "PC-01", last_event_at, 2.0, 5)
+    assert should_emit_detection("person", "CAM-02", last_event_at, 2.0, 5)
+    assert should_emit_detection("person", "PC-01", last_event_at, 7.0, 5)
 
 
 def test_draw_detections_adds_bounding_box() -> None:

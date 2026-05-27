@@ -1,111 +1,40 @@
 # Dataset SentinelAI
 
-Este directorio organiza el dataset propio del proyecto. La idea es recolectar imagenes reales con la webcam, etiquetarlas con bounding boxes y entrenar un modelo YOLO personalizado.
+Dataset propio para entrenar el modelo `best.pt` de SentinelAI con Roboflow o Google Colab.
 
-## Concepto importante
+Clases activas del modelo entrenado `proyecto_violence_v4`:
 
-No todo debe ser una clase YOLO.
+- `NonViolence`
+- `Violence`
 
-- `person`, `knife`, `gun`, `backpack`, `cell_phone`: clases de deteccion de objetos.
-- `normal`, `pelea`, `robo`: escenarios de captura para analisis posterior.
-- `objeto_sospechoso`, `objeto_no_sospechoso`: carpetas de recoleccion para ordenar imagenes antes de etiquetar.
+Los escenarios como `normal`, `pelea`, `robo`, `objeto_sospechoso` y `objeto_no_sospechoso` pueden servir para ordenar capturas, pero el modelo actual se consume como detector binario de violencia/no violencia.
 
-Para la version 1 del modelo, usa clases fisicas y claras:
-
-```text
-person
-knife
-gun
-backpack
-cell_phone
-```
-
-Despues, `AgenteAnalisis` y `AgenteRiesgo` combinan objetos, hora, ubicacion e historial para inferir si algo es sospechoso.
-
-## Estructura
+Estructura esperada:
 
 ```text
 dataset/
   raw/
-    normal/
-    objeto_sospechoso/
-    objeto_no_sospechoso/
-    pelea/
-    robo/
-  yolo/
-    images/
-      train/
-      val/
-      test/
-    labels/
-      train/
-      val/
-      test/
-  exports/
-  classes.txt
+  yolo/images/train
+  yolo/images/val
+  yolo/images/test
+  yolo/labels/train
+  yolo/labels/val
+  yolo/labels/test
   data.yaml
+  classes.txt
 ```
 
-## Captura con webcam
+Entrenamiento base en Colab:
 
-Ejemplo:
+```python
+from ultralytics import YOLO
 
-```powershell
-python tools/capture_dataset.py --scenario objeto_sospechoso --label knife
+model = YOLO("yolov8n.pt")
+model.train(data="dataset/data.yaml", epochs=50, imgsz=640)
 ```
 
-Controles:
-
-- `s`: guardar frame actual.
-- `a`: activar/desactivar captura automatica.
-- `q`: salir.
-
-Ejemplos utiles:
-
-```powershell
-python tools/capture_dataset.py --scenario normal --label person
-python tools/capture_dataset.py --scenario objeto_sospechoso --label gun
-python tools/capture_dataset.py --scenario objeto_no_sospechoso --label backpack
-python tools/capture_dataset.py --scenario pelea --label person
-python tools/capture_dataset.py --scenario robo --label person
-```
-
-## Etiquetado
-
-Instala LabelImg:
-
-```powershell
-pip install labelImg
-labelImg
-```
-
-Configura formato `YOLO` y guarda etiquetas en:
+Modelo activo actual:
 
 ```text
-dataset/yolo/labels/train
-dataset/yolo/labels/val
-dataset/yolo/labels/test
+D:\SentinelAI\proyecto_violence_v4\entrenamiento_violence-3\weights\best.pt
 ```
-
-Las imagenes correspondientes van en:
-
-```text
-dataset/yolo/images/train
-dataset/yolo/images/val
-dataset/yolo/images/test
-```
-
-Cada imagen debe tener un `.txt` con el mismo nombre.
-
-## Meta inicial
-
-Empieza con 200 a 500 imagenes bien hechas:
-
-- Varias distancias.
-- Varios angulos.
-- Buena y mala iluminacion.
-- Fondos reales.
-- Objetos parcialmente tapados.
-- Algo de movimiento y blur.
-
-Es mejor tener pocas imagenes reales y balanceadas que muchas imagenes repetidas.

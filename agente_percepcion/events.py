@@ -94,6 +94,14 @@ class DetectionEvent:
             context = {**context, "resumen_ia": enriched["resumen_ia"]}
         if enriched.get("factores_ia"):
             context = {**context, "factores_ia": enriched["factores_ia"]}
+        for key in (
+            "requiere_revision_humana",
+            "estado_revision_humana",
+            "automatizacion_bloqueada",
+            "review_id",
+        ):
+            if key in enriched:
+                context = {**context, key: enriched[key]}
 
         detected_at = enriched.get("detected_at") or self.hora
         risk_level = str(enriched.get("nivel_riesgo") or self.riesgo).upper()
@@ -197,7 +205,7 @@ class N8nClient:
 
 def risk_for_label(label: str) -> str:
     normalized = normalize_label(label)
-    high_risk = {"knife", "scissors", "gun"}
+    high_risk = {"knife", "scissors", "gun", "violence"}
 
     if normalized in high_risk:
         return "alto"
@@ -288,6 +296,7 @@ def _analysis_to_orchestrator_payload(event: DetectionEvent, response: AnalysisR
             "memoria": memory,
             "requiere_revision_humana": decision.requires_human_review,
             "estado_revision_humana": decision.human_review_status,
+            "review_id": _review_id(event),
         },
         "mensaje": f"{action}: {risk} con score {score_riesgo}",
         "procesado_en": response.processed_at.isoformat(),
@@ -299,3 +308,10 @@ def _hour_from_isoformat(value: str) -> int | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).hour
     except ValueError:
         return None
+
+
+def _review_id(event: DetectionEvent) -> str:
+    normalized_object = normalize_label(event.objeto).replace(" ", "_")
+    timestamp = event.hora.replace(":", "").replace("-", "").replace(".", "")
+    safe_camera = event.camara.replace(" ", "_")
+    return f"{safe_camera}_{normalized_object}_{timestamp}"[:64]

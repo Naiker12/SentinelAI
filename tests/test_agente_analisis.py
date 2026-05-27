@@ -121,3 +121,36 @@ def test_analysis_ignores_low_confidence_unknown_object() -> None:
     response = analyze_event(request)
 
     assert response.decision.action == "IGNORAR_BAJA_CONFIANZA"
+
+
+def test_analysis_marks_violence_as_high_risk_for_human_review() -> None:
+    request = AnalysisRequest(
+        evento=PerceptionEvent(
+            objeto="Violence",
+            confianza=0.86,
+            hora=datetime(2026, 5, 27, 20, 30, tzinfo=timezone.utc),
+            camara="PC-01",
+        )
+    )
+
+    response = analyze_event(request)
+
+    assert response.result.risk_level == "ALTO"
+    assert response.result.possible_behavior == "posible_pelea_o_agresion"
+    assert response.decision.requires_human_review is True
+
+
+def test_analysis_marks_nonviolence_as_low_risk() -> None:
+    request = AnalysisRequest(
+        evento=PerceptionEvent(
+            objeto="NonViolence",
+            confianza=0.92,
+            hora=datetime(2026, 5, 27, 14, 30, tzinfo=timezone.utc),
+            camara="PC-01",
+        )
+    )
+
+    response = analyze_event(request)
+
+    assert response.result.risk_level == "BAJO"
+    assert response.decision.requires_human_review is False

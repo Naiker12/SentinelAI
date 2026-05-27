@@ -20,6 +20,12 @@ def test_agente_analisis_workflow_has_core_nodes() -> None:
     assert "Normalizar Evento" in node_names
     assert "AgenteRiesgo - Score Hibrido" in node_names
     assert "AgenteAccion - Preparar Respuesta" in node_names
+    assert "Requiere Revision Humana?" in node_names
+    assert "AgenteInterfazHumana - Preparar Telegram" in node_names
+    assert "Telegram Supervisor - Enviar Validacion" in node_names
+    assert "Webhook - Callback Telegram Supervisor" in node_names
+    assert "AgenteInterfazHumana - Procesar Callback" in node_names
+    assert "Responder Callback Telegram" in node_names
     assert "Responder a AgentePercepcion" in node_names
 
 
@@ -36,7 +42,25 @@ def test_agente_analisis_workflow_connections_are_complete() -> None:
     )
     assert (
         connections["AgenteAccion - Preparar Respuesta"]["main"][0][0]["node"]
-        == "Responder a AgentePercepcion"
+        == "Requiere Revision Humana?"
+    )
+    assert connections["Requiere Revision Humana?"]["main"][0][0]["node"] == "Responder a AgentePercepcion"
+    assert (
+        connections["Requiere Revision Humana?"]["main"][0][1]["node"]
+        == "AgenteInterfazHumana - Preparar Telegram"
+    )
+    assert connections["Requiere Revision Humana?"]["main"][1][0]["node"] == "Responder a AgentePercepcion"
+    assert (
+        connections["AgenteInterfazHumana - Preparar Telegram"]["main"][0][0]["node"]
+        == "Telegram Supervisor - Enviar Validacion"
+    )
+    assert (
+        connections["Webhook - Callback Telegram Supervisor"]["main"][0][0]["node"]
+        == "AgenteInterfazHumana - Procesar Callback"
+    )
+    assert (
+        connections["AgenteInterfazHumana - Procesar Callback"]["main"][0][0]["node"]
+        == "Responder Callback Telegram"
     )
 
 
@@ -50,8 +74,9 @@ def test_agente_analisis_workflow_returns_persistence_contract() -> None:
     assert "nivel_riesgo" in action_code
     assert "accion_tomada" in action_code
     assert "detected_at" in action_code
-    assert "tracking: data.tracking" in action_code
+    assert "tracking: {}" in action_code
     assert "memoria: data.memoria" in action_code
+    assert "review_id" in action_code
 
 
 def test_agente_analisis_workflow_uses_low_base_score_for_cell_phone() -> None:
@@ -63,6 +88,8 @@ def test_agente_analisis_workflow_uses_low_base_score_for_cell_phone() -> None:
     assert "person: 10" in risk_code
     assert "knife: 60" in risk_code
     assert "gun: 80" in risk_code
+    assert "violence: 70" in risk_code
+    assert "nonviolence: 2" in risk_code
 
 
 def test_agente_analisis_workflow_normalizes_pistol_aliases_to_gun() -> None:
@@ -96,7 +123,7 @@ def test_agente_analisis_workflow_blocks_automation_until_human_review() -> None
     assert "automatizacion_bloqueada" in action_code
 
 
-def test_agente_analisis_workflow_uses_tracking_context() -> None:
+def test_agente_analisis_workflow_uses_no_tracking_contract() -> None:
     workflow = json.loads(Path("n8n/AgenteAnalisis.workflow.json").read_text(encoding="utf-8"))
     code_nodes = {node["name"]: node["parameters"]["jsCode"] for node in workflow["nodes"] if node["type"].endswith(".code")}
     normalize_code = code_nodes["Normalizar Evento"]
@@ -104,10 +131,10 @@ def test_agente_analisis_workflow_uses_tracking_context() -> None:
     action_code = code_nodes["AgenteAccion - Preparar Respuesta"]
 
     assert "cantidad_personas" in normalize_code
-    assert "track_id" in normalize_code
-    assert "persona_asociada_objeto_peligroso" in risk_code
-    assert "risk_rules_v2" in risk_code
-    assert "AgenteTracking" in action_code
+    assert "tracking: {}" in normalize_code
+    assert "persona_asociada_objeto_peligroso" not in risk_code
+    assert "risk_rules_v4_no_tracking" in risk_code
+    assert "AgenteInterfazHumana" in action_code
 
 
 def test_n8n_test_payloads_are_valid_json() -> None:
@@ -147,7 +174,9 @@ def test_n8n_ia_code_snippets_are_present() -> None:
     assert "score_riesgo" in memory.read_text(encoding="utf-8")
     assert "inline_keyboard" in telegram.read_text(encoding="utf-8")
     assert "sentinel:confirm" in telegram.read_text(encoding="utf-8")
+    assert "review_id" in telegram.read_text(encoding="utf-8")
     assert "human_label" in supervisor.read_text(encoding="utf-8")
+    assert "answer_callback_query" in supervisor.read_text(encoding="utf-8")
     assert "Alerta_Final_Telegram" in guide.read_text(encoding="utf-8")
     assert "Supervisor Humano" in guide.read_text(encoding="utf-8")
     assert "Responde solo JSON valido" in prompt.read_text(encoding="utf-8")

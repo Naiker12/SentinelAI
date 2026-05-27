@@ -18,6 +18,14 @@ function normalizeObject(value) {
     cellphone: "cell_phone",
     mobile_phone: "cell_phone",
     phone: "cell_phone",
+    non_violence: "nonviolence",
+    "non-violence": "nonviolence",
+    no_violence: "nonviolence",
+    "no-violence": "nonviolence",
+    normal: "nonviolence",
+    pelea: "violence",
+    fight: "violence",
+    fighting: "violence",
   };
   return aliases[normalized] ?? normalized;
 }
@@ -91,8 +99,10 @@ const baseScores = {
   car: 8,
   truck: 8,
   motorcycle: 10,
+  violence: 70,
+  nonviolence: 2,
 };
-const dangerousObjects = new Set(["knife", "gun", "scissors"]);
+const dangerousObjects = new Set(["knife", "gun", "scissors", "violence"]);
 const factors = [];
 let score = 0;
 
@@ -109,14 +119,6 @@ if (!objeto) {
   score += addFactor(factors, 8, "objeto_observado", `Objeto observado sin regla critica: ${objeto}.`);
 }
 
-if (dangerousObjects.has(objeto) && seguimiento.person_id) {
-  score += addFactor(
-    factors,
-    10,
-    "persona_asociada_objeto_peligroso",
-    `Objeto peligroso asociado a ${seguimiento.person_id}.`,
-  );
-}
 if (confianza >= 0.9) score += addFactor(factors, 10, "alta_confianza", `Confianza alta: ${confianza}.`);
 else if (confianza >= 0.7) score += addFactor(factors, 5, "confianza_media", `Confianza aceptable: ${confianza}.`);
 else score += addFactor(factors, -10, "baja_confianza", `Confianza baja: ${confianza}.`);
@@ -124,17 +126,6 @@ else score += addFactor(factors, -10, "baja_confianza", `Confianza baja: ${confi
 if (escena.noche) score += addFactor(factors, 15, "horario_nocturno", "Evento detectado en horario nocturno.");
 if (["baja", "oscura", "low", "dark"].includes(escena.iluminacion)) {
   score += addFactor(factors, 10, "baja_iluminacion", "Condicion de baja iluminacion.");
-}
-if (seguimiento.velocidad >= 7) {
-  score += addFactor(factors, 12, "movimiento_rapido", `Velocidad elevada: ${seguimiento.velocidad}.`);
-}
-if (seguimiento.movimiento_erratico) {
-  score += addFactor(factors, 15, "movimiento_erratico", "Movimiento erratico reportado por tracking.");
-}
-if (seguimiento.permanencia_segundos >= 900) {
-  score += addFactor(factors, 25, "permanencia_sospechosa", "Permanencia mayor o igual a 15 minutos.");
-} else if (seguimiento.permanencia_segundos >= 300) {
-  score += addFactor(factors, 10, "permanencia_media", "Permanencia mayor o igual a 5 minutos.");
 }
 if (historial.alertas_previas_24h >= 2) {
   score += addFactor(factors, 15, "historial_alertas", "La camara/zona tiene alertas recientes.");
@@ -161,6 +152,7 @@ return [
   {
     json: {
       ...evidencia,
+      review_id: `${evento.camara}_${objeto}_${hora}`.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64),
       prompt_ia: JSON.stringify(evidencia, null, 2),
     },
   },

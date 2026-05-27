@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from pathlib import Path
 
 import cv2
 from cv2.typing import MatLike
@@ -15,8 +17,14 @@ class Detection:
 
 class YoloDetector:
     def __init__(self, model_path: str, confidence: float, allowed_classes: set[str]) -> None:
+        _configure_ultralytics_runtime()
         from ultralytics import YOLO
 
+        if model_path != "yolov8n.pt" and not Path(model_path).exists():
+            raise FileNotFoundError(
+                "No se encontro el modelo de SentinelAI. "
+                f"Coloca el best.pt entrenado en {model_path} o ajusta SENTINEL_MODEL."
+            )
         self._model = YOLO(model_path)
         self._confidence = confidence
         self._allowed_classes = allowed_classes
@@ -106,5 +114,24 @@ def normalize_label(label: str) -> str:
         "cellphone": "cell phone",
         "mobile phone": "cell phone",
         "phone": "cell phone",
+        "non violence": "nonviolence",
+        "non-violence": "nonviolence",
+        "no violence": "nonviolence",
+        "no-violence": "nonviolence",
+        "normal": "nonviolence",
+        "pelea": "violence",
+        "fight": "violence",
+        "fighting": "violence",
     }
     return aliases.get(normalized, normalized)
+
+
+def _configure_ultralytics_runtime() -> None:
+    base_dir = Path(__file__).resolve().parents[1]
+    yolo_dir = base_dir / ".ultralytics"
+    mpl_dir = base_dir / ".matplotlib"
+    yolo_dir.mkdir(parents=True, exist_ok=True)
+    (yolo_dir / "Ultralytics").mkdir(parents=True, exist_ok=True)
+    mpl_dir.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("YOLO_CONFIG_DIR", str(yolo_dir))
+    os.environ.setdefault("MPLCONFIGDIR", str(mpl_dir))

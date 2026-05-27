@@ -88,3 +88,33 @@ def test_normalize_supabase_events_reads_tracking_and_ia_context() -> None:
     assert df.iloc[0]["movimiento_erratico"] == True
     assert df.iloc[0]["eventos_previos_24h"] == 9
     assert "persona asociada" in df.iloc[0]["resumen_ia"]
+
+
+def test_normalize_supabase_events_reads_human_interface_context() -> None:
+    rows = [
+        {
+            "detected_at": "2026-05-26T23:00:00+00:00",
+            "camara_id": "PC-01",
+            "objeto": "knife",
+            "confianza": 0.91,
+            "riesgo": "ALTO",
+            "score_riesgo": 0.92,
+            "nivel_riesgo": "CRITICO",
+            "accion_tomada": "SOLICITAR_VALIDACION_URGENTE",
+            "box": [1, 2, 3, 4],
+            "contexto": {
+                "zona": "entrada",
+                "requiere_revision_humana": True,
+                "estado_revision_humana": "PENDIENTE",
+                "automatizacion_bloqueada": True,
+                "review_id": "PC-01_knife_20260526",
+            },
+        }
+    ]
+
+    df = normalize_supabase_events(rows)
+
+    assert df.iloc[0]["requiere_revision_humana"] == True
+    assert df.iloc[0]["estado_revision_humana"] == "PENDIENTE"
+    assert df.iloc[0]["automatizacion_bloqueada"] == True
+    assert df.iloc[0]["review_id"] == "PC-01_knife_20260526"
