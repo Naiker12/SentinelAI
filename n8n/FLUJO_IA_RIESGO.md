@@ -32,6 +32,24 @@ El workflow `n8n/AgenteAnalisis.workflow.json` ya contiene estos nodos. Python r
 respuesta rapido por `Responder a AgentePercepcion`; la validacion por Telegram queda
 como rama paralela/asíncrona cuando `decision.requiere_revision_humana=true`.
 
+## Evidencia visual en Supabase Storage
+
+La tabla `detection_events` ya tiene la columna `imagen_url` desde la migracion
+inicial, por eso no se crea una migracion nueva para ese campo. El flujo actual
+guarda la captura anotada en Supabase Storage y reemplaza `entrada.imagen` por la
+URL publica antes de enviar el evento a n8n y antes de guardar el registro en
+Supabase.
+
+Variables usadas por Python:
+
+```text
+SENTINEL_UPLOAD_EVIDENCE=true
+SUPABASE_STORAGE_BUCKET=imagen
+```
+
+El bucket `imagen` debe existir en Supabase Storage. Si el bucket es publico,
+Telegram y el dashboard pueden abrir la URL guardada en `detection_events.imagen_url`.
+
 ## Flujo IA extendido opcional
 
 Si quieres activar LLM/Groq y memoria externa, usa los snippets de `n8n/code/`

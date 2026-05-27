@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
+from pathlib import Path
 
 import requests
 
@@ -150,6 +151,39 @@ class SupabaseEventStore:
             .execute()
         )
         return list(response.data or [])
+
+
+class SupabaseEvidenceStore:
+    def __init__(
+        self,
+        supabase_url: str | None,
+        service_role_key: str | None,
+        bucket: str,
+    ) -> None:
+        if not supabase_url or not service_role_key:
+            raise RuntimeError(
+                "Faltan SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en el archivo .env."
+            )
+
+        from supabase import create_client
+
+        self._client = create_client(supabase_url, service_role_key)
+        self._bucket = bucket
+
+    def upload_image(self, local_path: str | Path, event: DetectionEvent) -> str:
+        path = Path(local_path)
+        storage_path = _storage_path_for_event(event, path)
+        with path.open("rb") as image_file:
+            self._client.storage.from_(self._bucket).upload(
+                path=storage_path,
+                file=image_file,
+                file_options={
+                    "content-type": "image/jpeg",
+                    "cache-control": "3600",
+                    "upsert": "true",
+                },
+            )
+        return str(self._client.storage.from_(self._bucket).get_public_url(storage_path))
 
 
 @dataclass(frozen=True)
@@ -321,3 +355,16 @@ def _review_id(event: DetectionEvent) -> str:
     timestamp = event.hora.replace(":", "").replace("-", "").replace(".", "")
     safe_camera = event.camara.replace(" ", "_")
     return f"{safe_camera}_{normalized_object}_{timestamp}"[:64]
+
+
+def _storage_path_for_event(event: DetectionEvent, local_path: str | Path) -> str:
+    local_path = Path(local_path)
+    detected_at = datetime.fromisoformat(event.hora.replace("Z", "+00:00"))
+    date_folder = detected_at.strftime("%Y/%m/%d")
+    safe_camera = "".join(
+        char if char.isalnum() or char in {"_", "-"} else "_"
+        for char in event.camara
+    )
+    safe_object = normalize_label(event.objeto).replace(" ", "_")
+    file_name = f"{_review_id(event)}_{local_path.stem}.jpg"
+    return f"{safe_camera}/{date_folder}/{safe_object}/{file_name}"

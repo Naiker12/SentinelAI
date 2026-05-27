@@ -4,7 +4,8 @@ import numpy as np
 
 from agente_percepcion.config import _classes
 from agente_percepcion.detector import Detection, draw_detections, normalize_label
-from agente_percepcion.events import DetectionEvent, N8nClient, risk_for_label
+from agente_percepcion.events import DetectionEvent, N8nClient, _storage_path_for_event, risk_for_label
+from agente_percepcion.telegram import TelegramSupervisorClient
 from agente_percepcion.memory import should_emit_detection
 from agente_analisis.risk_engine import analyze_event
 
@@ -19,6 +20,20 @@ def test_detection_event_maps_to_supabase_row() -> None:
     assert row["camara_id"] == "PC-01"
     assert row["riesgo"] == "BAJO"
     assert row["box"] == [10, 20, 200, 300]
+
+
+def test_detection_event_stores_public_image_url_in_supabase_row() -> None:
+    detection = Detection(label="violence", confidence=0.91, box=(10, 20, 200, 300))
+    image_url = "https://example.supabase.co/storage/v1/object/public/imagen/evento.jpg"
+
+    event = DetectionEvent.from_detection(
+        detection,
+        camera_name="PC-01",
+        image_path=image_url,
+    )
+    row = event.to_supabase_row()
+
+    assert row["imagen_url"] == image_url
 
 
 def test_detection_event_maps_n8n_persistence_to_supabase_row() -> None:
@@ -184,6 +199,48 @@ def test_detection_event_can_emit_precomputed_analysis_payload() -> None:
     assert payload["decision"]["requiere_revision_humana"] is True
     assert payload["decision"]["automatizacion_bloqueada"] is True
     assert payload["persistencia"]["tracking"]["person_id"] == "person_0001"
+
+
+def test_storage_path_for_event_is_stable_and_grouped() -> None:
+    event = DetectionEvent(
+        objeto="violence",
+        confianza=0.91,
+        hora="2026-05-27T17:50:07+00:00",
+        camara="PC-01",
+        riesgo="alto",
+        box=(10, 20, 200, 300),
+    )
+
+    path = _storage_path_for_event(event, local_path="capturas/evento_123.jpg")
+
+    assert path.startswith("PC-01/2026/05/27/violence/")
+    assert path.endswith(".jpg")
+
+
+def test_telegram_validation_sends_public_image_url(monkeypatch) -> None:
+    calls = []
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+    def fake_post(url, **kwargs):
+        calls.append((url, kwargs))
+        return Response()
+
+    monkeypatch.setattr("agente_percepcion.telegram.requests.post", fake_post)
+    detection = Detection(label="violence", confidence=0.91, box=(10, 20, 200, 300))
+    event = DetectionEvent.from_detection(
+        detection,
+        camera_name="PC-01",
+        image_path="https://example.supabase.co/storage/v1/object/public/imagen/evento.jpg",
+    ).with_analysis(analyze_event(DetectionEvent.from_detection(detection, "PC-01").to_analysis_request()))
+
+    result = TelegramSupervisorClient("token", "123").send_validation(event)
+
+    assert result.sent is True
+    assert calls[0][0].endswith("/sendPhoto")
+    assert calls[0][1]["json"]["photo"].startswith("https://example.supabase.co")
 
 
 def test_event_gate_uses_label_and_camera_cooldown() -> None:

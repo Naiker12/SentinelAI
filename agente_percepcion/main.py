@@ -10,7 +10,12 @@ from agente_analisis.risk_engine import analyze_event
 from agente_percepcion.camera import Camera
 from agente_percepcion.config import get_settings
 from agente_percepcion.detector import YoloDetector, draw_detections
-from agente_percepcion.events import DetectionEvent, N8nClient, SupabaseEventStore
+from agente_percepcion.events import (
+    DetectionEvent,
+    N8nClient,
+    SupabaseEventStore,
+    SupabaseEvidenceStore,
+)
 from agente_percepcion.memory import EventMemory, should_emit_detection
 from agente_percepcion.telegram import TelegramSupervisorClient, mark_telegram_evidence
 
@@ -24,6 +29,11 @@ def run() -> None:
         settings.supabase_url,
         settings.supabase_service_role_key,
         settings.supabase_detection_events_table,
+    )
+    evidence_store = SupabaseEvidenceStore(
+        settings.supabase_url,
+        settings.supabase_service_role_key,
+        settings.supabase_storage_bucket,
     )
     n8n = N8nClient(
         settings.n8n_webhook_url,
@@ -85,6 +95,7 @@ def run() -> None:
                 if analysis.decision.requires_human_review and not event.imagen:
                     event = replace(event, imagen=_save_frame(settings.image_dir, annotated_frame))
                     analysis = analyze_event(event.to_analysis_request())
+                event = _upload_evidence(settings, evidence_store, event)
                 event = event.with_analysis(analysis)
                 _send_to_telegram(settings, telegram, event)
                 n8n_result = _send_to_n8n(n8n, event)
@@ -114,6 +125,26 @@ def _send_to_n8n(n8n: N8nClient, event: DetectionEvent):
 
     print(f"n8n respondio ({result.status_code}): {result.response}")
     return result
+
+
+def _upload_evidence(
+    settings,
+    evidence_store: SupabaseEvidenceStore,
+    event: DetectionEvent,
+) -> DetectionEvent:
+    if not settings.upload_evidence or not event.imagen:
+        return event
+
+    image_path = Path(event.imagen)
+    if not image_path.exists():
+        return event
+
+    try:
+        image_url = evidence_store.upload_image(image_path, event)
+        return replace(event, imagen=image_url)
+    except Exception as exc:
+        print(f"No se pudo subir evidencia a Supabase Storage: {exc}")
+        return event
 
 
 def _send_to_telegram(settings, telegram: TelegramSupervisorClient, event: DetectionEvent) -> None:

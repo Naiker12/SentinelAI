@@ -46,6 +46,8 @@ class TelegramSupervisorClient:
         }
 
         image_path = payload.get("entrada", {}).get("imagen")
+        if image_path and str(image_path).startswith(("http://", "https://")):
+            return self._send_photo_url(str(image_path), caption, reply_markup)
         if image_path and Path(str(image_path)).exists():
             return self._send_photo(Path(str(image_path)), caption, reply_markup)
         return self._send_message(caption, reply_markup)
@@ -70,6 +72,30 @@ class TelegramSupervisorClient:
                     files={"photo": image_file},
                     timeout=self.timeout_seconds,
                 )
+            response.raise_for_status()
+            return TelegramSendResult(sent=True)
+        except requests.RequestException as exc:
+            return TelegramSendResult(sent=False, error=str(exc))
+
+    def _send_photo_url(
+        self,
+        image_url: str,
+        caption: str,
+        reply_markup: dict,
+    ) -> TelegramSendResult:
+        url = f"https://api.telegram.org/bot{self.bot_token}/sendPhoto"
+        try:
+            response = requests.post(
+                url,
+                json={
+                    "chat_id": self.chat_id,
+                    "photo": image_url,
+                    "caption": caption,
+                    "parse_mode": "HTML",
+                    "reply_markup": reply_markup,
+                },
+                timeout=self.timeout_seconds,
+            )
             response.raise_for_status()
             return TelegramSendResult(sent=True)
         except requests.RequestException as exc:

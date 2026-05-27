@@ -52,6 +52,8 @@ class Settings:
     supabase_url: str | None
     supabase_service_role_key: str | None
     supabase_detection_events_table: str
+    supabase_storage_bucket: str
+    upload_evidence: bool
     n8n_webhook_url: str | None
     allow_n8n_test_webhook: bool
     telegram_bot_token: str | None
@@ -83,6 +85,9 @@ def get_settings() -> Settings:
         supabase_detection_events_table=os.getenv(
             "SUPABASE_DETECTION_EVENTS_TABLE", "detection_events"
         ),
+        supabase_storage_bucket=os.getenv("SUPABASE_STORAGE_BUCKET", "imagen").strip()
+        or "imagen",
+        upload_evidence=_as_bool(os.getenv("SENTINEL_UPLOAD_EVIDENCE"), default=True),
         n8n_webhook_url=webhook or None,
         allow_n8n_test_webhook=_as_bool(
             os.getenv("SENTINEL_ALLOW_N8N_TEST_WEBHOOK"),
