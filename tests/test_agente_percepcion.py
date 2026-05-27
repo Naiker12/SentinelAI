@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import numpy as np
+import sys
+import types
 
 from agente_percepcion.config import _classes
 from agente_percepcion.detector import Detection, draw_detections, normalize_label
@@ -99,6 +101,43 @@ def test_allowed_classes_normalize_to_detector_labels() -> None:
         "arma",
         "cell_phone",
     }
+
+
+def test_debug_detector_uses_lower_predict_confidence(monkeypatch) -> None:
+    from agente_percepcion import detector as detector_module
+    from agente_percepcion.detector import YoloDetector
+
+    calls = []
+
+    class FakeBox:
+        cls = [0]
+        conf = [0.2]
+        xyxy = [[10, 20, 30, 40]]
+
+    class FakeModel:
+        names = {0: "arma"}
+
+        def predict(self, frame, conf, verbose):
+            calls.append(conf)
+            return [type("Result", (), {"names": self.names, "boxes": [FakeBox()]})()]
+
+    monkeypatch.setattr(detector_module, "_configure_ultralytics_runtime", lambda: None)
+    monkeypatch.setitem(
+        sys.modules,
+        "ultralytics",
+        types.SimpleNamespace(YOLO=lambda model_path: FakeModel()),
+    )
+
+    detector = YoloDetector(
+        "yolov8n.pt",
+        confidence=0.5,
+        allowed_classes={"arma"},
+        debug_detections=True,
+        debug_confidence=0.1,
+    )
+
+    assert detector.detect(np.zeros((10, 10, 3), dtype=np.uint8)) == []
+    assert calls == [0.1]
 
 
 def test_n8n_without_webhook_does_not_send() -> None:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import queue
+import threading
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -15,6 +17,7 @@ from agente_percepcion.events import (
     N8nClient,
     SupabaseEventStore,
     SupabaseEvidenceStore,
+    risk_for_label,
 )
 from agente_percepcion.memory import EventMemory, should_emit_detection
 from agente_percepcion.telegram import TelegramSupervisorClient, mark_telegram_evidence
@@ -24,7 +27,13 @@ def run() -> None:
     settings = get_settings()
     print(f"Configuracion cargada desde: {settings.env_file}")
     print(f"Webhook n8n: {settings.n8n_webhook_url or 'NO CONFIGURADO'}")
-    detector = YoloDetector(settings.model_path, settings.confidence, settings.classes)
+    detector = YoloDetector(
+        settings.model_path,
+        settings.confidence,
+        settings.classes,
+        debug_detections=settings.debug_detections,
+        debug_confidence=settings.debug_confidence,
+    )
     store = SupabaseEventStore(
         settings.supabase_url,
         settings.supabase_service_role_key,
@@ -41,7 +50,15 @@ def run() -> None:
     )
     telegram = TelegramSupervisorClient(settings.telegram_bot_token, settings.telegram_chat_id)
     memory = EventMemory()
+    memory_lock = threading.Lock()
     last_event_at: dict[str, float] = {}
+    event_queue: queue.Queue[tuple[DetectionEvent, object, float] | None] = queue.Queue()
+    worker = threading.Thread(
+        target=_event_worker,
+        args=(settings, evidence_store, telegram, n8n, store, memory, memory_lock, event_queue),
+        daemon=True,
+    )
+    worker.start()
 
     if settings.save_images:
         settings.image_dir.mkdir(parents=True, exist_ok=True)
@@ -61,22 +78,24 @@ def run() -> None:
             now = time.monotonic()
 
             for detection in detections:
+                cooldown = _cooldown_for_detection(settings, detection.label)
                 if not should_emit_detection(
                     detection.label,
                     settings.camera_name,
                     last_event_at,
                     now,
-                    settings.event_cooldown_seconds,
+                    cooldown,
                     detection.box,
                 ):
                     continue
 
                 image_path = (
                     _save_frame(settings.image_dir, annotated_frame)
-                    if settings.save_images
+                    if settings.save_images or risk_for_label(detection.label) == "alto"
                     else None
                 )
-                memory_snapshot = memory.snapshot(now)
+                with memory_lock:
+                    memory_snapshot = memory.snapshot(now)
                 event = DetectionEvent.from_detection(
                     detection,
                     camera_name=settings.camera_name,
@@ -94,20 +113,53 @@ def run() -> None:
                 analysis = analyze_event(event.to_analysis_request())
                 if analysis.decision.requires_human_review and not event.imagen:
                     event = replace(event, imagen=_save_frame(settings.image_dir, annotated_frame))
-                    analysis = analyze_event(event.to_analysis_request())
-                event = _upload_evidence(settings, evidence_store, event)
-                event = event.with_analysis(analysis)
-                _send_to_telegram(settings, telegram, event)
-                n8n_result = _send_to_n8n(n8n, event)
-                store.save(event, n8n_result.response or event.analisis)
-                memory.remember(now, analysis.result.risk_level)
-                print(event.to_payload())
+                event_queue.put((event, analysis, now))
 
             cv2.imshow("SentinelAI - AgentePercepcion", annotated_frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
+    event_queue.put(None)
+    worker.join(timeout=10)
     cv2.destroyAllWindows()
+
+
+def _event_worker(
+    settings,
+    evidence_store: SupabaseEvidenceStore,
+    telegram: TelegramSupervisorClient,
+    n8n: N8nClient,
+    store: SupabaseEventStore,
+    memory: EventMemory,
+    memory_lock: threading.Lock,
+    event_queue: queue.Queue[tuple[DetectionEvent, object, float] | None],
+) -> None:
+    while True:
+        item = event_queue.get()
+        if item is None:
+            event_queue.task_done()
+            break
+
+        event, analysis, detected_monotonic = item
+        try:
+            event = _upload_evidence(settings, evidence_store, event)
+            event = event.with_analysis(analysis)
+            _send_to_telegram(settings, telegram, event)
+            n8n_result = _send_to_n8n(n8n, event)
+            store.save(event, n8n_result.response or event.analisis)
+            with memory_lock:
+                memory.remember(detected_monotonic, analysis.result.risk_level)
+            print(event.to_payload())
+        except Exception as exc:
+            print(f"No se pudo procesar evento en segundo plano: {exc}")
+        finally:
+            event_queue.task_done()
+
+
+def _cooldown_for_detection(settings, label: str) -> float:
+    if risk_for_label(label) == "alto":
+        return settings.dangerous_event_cooldown_seconds
+    return settings.event_cooldown_seconds
 
 
 def _save_frame(image_dir: Path, frame) -> str:

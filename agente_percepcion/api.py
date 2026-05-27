@@ -39,7 +39,13 @@ def events(limit: int = Query(default=50, ge=1, le=200)) -> list[dict]:
 
 @app.post("/detect-once")
 def detect_once() -> dict:
-    detector = YoloDetector(settings.model_path, settings.confidence, settings.classes)
+    detector = YoloDetector(
+        settings.model_path,
+        settings.confidence,
+        settings.classes,
+        debug_detections=settings.debug_detections,
+        debug_confidence=settings.debug_confidence,
+    )
     n8n = N8nClient(settings.n8n_webhook_url)
 
     with Camera(

@@ -16,7 +16,14 @@ class Detection:
 
 
 class YoloDetector:
-    def __init__(self, model_path: str, confidence: float, allowed_classes: set[str]) -> None:
+    def __init__(
+        self,
+        model_path: str,
+        confidence: float,
+        allowed_classes: set[str],
+        debug_detections: bool = False,
+        debug_confidence: float = 0.15,
+    ) -> None:
         _configure_ultralytics_runtime()
         from ultralytics import YOLO
 
@@ -28,27 +35,51 @@ class YoloDetector:
         self._model = YOLO(model_path)
         self._confidence = confidence
         self._allowed_classes = allowed_classes
+        self._debug_detections = debug_detections
+        self._debug_confidence = debug_confidence
+        print(f"Modelo YOLO: {model_path}")
+        print(f"Clases del modelo: {self._model.names}")
+        print(f"Clases habilitadas: {sorted(self._allowed_classes) or 'todas'}")
 
     def detect(self, frame: MatLike) -> list[Detection]:
-        results = self._model.predict(frame, conf=self._confidence, verbose=False)
+        predict_confidence = (
+            min(self._confidence, self._debug_confidence)
+            if self._debug_detections
+            else self._confidence
+        )
+        results = self._model.predict(frame, conf=predict_confidence, verbose=False)
         detections: list[Detection] = []
+        debug_rows: list[str] = []
 
         for result in results:
             names = result.names
             for box in result.boxes:
                 class_id = int(box.cls[0])
                 label = normalize_label(str(names[class_id]))
+                confidence = round(float(box.conf[0]), 4)
+                filtered_reasons = []
+                if confidence < self._confidence:
+                    filtered_reasons.append(f"conf<{self._confidence}")
                 if self._allowed_classes and label not in self._allowed_classes:
+                    filtered_reasons.append("clase_no_habilitada")
+                if self._debug_detections:
+                    state = "FILTRADA" if filtered_reasons else "OK"
+                    reason = ",".join(filtered_reasons) if filtered_reasons else "-"
+                    debug_rows.append(f"{label}:{confidence:.3f}:{state}:{reason}")
+                if filtered_reasons:
                     continue
 
                 x1, y1, x2, y2 = (int(value) for value in box.xyxy[0].tolist())
                 detections.append(
                     Detection(
                         label=label,
-                        confidence=round(float(box.conf[0]), 4),
+                        confidence=confidence,
                         box=(x1, y1, x2, y2),
                     )
                 )
+
+        if self._debug_detections and debug_rows:
+            print("Detecciones YOLO:", " | ".join(debug_rows))
 
         return detections
 
