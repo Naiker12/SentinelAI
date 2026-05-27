@@ -6,7 +6,7 @@ MVP inicial de `AgentePercepcion`: camara local, deteccion con YOLOv8, eventos J
 
 - Python
 - OpenCV
-- YOLO/Ultralytics con modelo entrenado `proyecto_violence_v4/.../weights/best.pt`
+- YOLO/Ultralytics con modelo entrenado `yolo_percepcion/entrenamiento_seguridad/weights/best.pt`
 - FastAPI
 - Supabase/Postgres
 - Prisma para migraciones
@@ -56,7 +56,7 @@ Presiona `q` para cerrar la ventana de camara.
 Captura imagenes reales con la webcam:
 
 ```powershell
-python tools/capture_dataset.py --scenario objeto_sospechoso --label knife
+python tools/capture_dataset.py --scenario objeto_sospechoso --label arma_blanca
 ```
 
 Controles:
@@ -76,17 +76,21 @@ dataset/
   classes.txt
 ```
 
-Para la primera version del modelo personalizado usa clases fisicas:
+El modelo activo de seguridad usa estas clases:
 
 ```text
-person
-knife
-gun
-backpack
-cell_phone
+arma
+arma_blanca
+fusil
+multitud
+no_violencia
+persona
+persona_sospechosa
+undefined
+violencia
 ```
 
-Los escenarios como `normal`, `pelea` y `robo` se usan para ordenar la recoleccion. Mas adelante se analizan con reglas o modelos de accion.
+Las reglas de riesgo consumen esas clases directamente. `undefined` queda registrada como clase del entrenamiento, pero no se considera peligrosa por defecto.
 
 ## Ejecutar dashboard local
 
@@ -152,14 +156,14 @@ El estado actual y roadmap estan en `docs/ESTADO_ACTUAL.md`.
 
 ## Configuracion importante
 
-La variable `SENTINEL_CLASSES` controla que clases generan eventos. Con el modelo de violencia entrenado en Google Colab debe quedar:
+La variable `SENTINEL_CLASSES` controla que clases generan eventos. Con el modelo nuevo debe quedar:
 
 ```env
-SENTINEL_MODEL=agente_percepcion/model/best.pt
-SENTINEL_CLASSES=violence,nonviolence
+SENTINEL_MODEL=yolo_percepcion/entrenamiento_seguridad/weights/best.pt
+SENTINEL_CLASSES=arma,arma_blanca,fusil,multitud,no_violencia,persona,persona_sospechosa,violencia
 ```
 
-El modelo reporta las clases `NonViolence` y `Violence`; el sistema las normaliza internamente como `nonviolence` y `violence`.
+El modelo reporta clases en espanol; el sistema tambien acepta alias antiguos como `Violence`, `NonViolence`, `gun`, `knife` y `person`, normalizandolos al vocabulario nuevo.
 
 ## n8n
 
@@ -174,7 +178,7 @@ El agente enviara un JSON similar a:
 
 ```json
 {
-  "objeto": "person",
+  "objeto": "persona",
   "confianza": 0.91,
   "hora": "2026-05-26T20:30:00.000000+00:00",
   "camara": "PC-01",

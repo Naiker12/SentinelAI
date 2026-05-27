@@ -69,7 +69,7 @@ http://localhost:5678/webhook-test/sentinel-analysis
 
 ```json
 {
-  "objeto": "knife",
+  "objeto": "arma_blanca",
   "confianza": 0.91,
   "hora": "2026-05-26T20:30:00.000000+00:00",
   "camara": "PC-01",
@@ -87,7 +87,7 @@ sin abrir la camara.
 
 ```json
 {
-  "objeto": "knife",
+  "objeto": "arma_blanca",
   "confianza": 0.91,
   "hora": "2026-05-26T23:30:00.000000+00:00",
   "camara": "PC-01",
@@ -124,7 +124,7 @@ sin abrir la camara.
     "severidad": "CRITICA",
     "score": 100,
     "score_riesgo": 1.0,
-    "algoritmo": "risk_rules_v2"
+    "algoritmo": "risk_rules_v5_seguridad_multiclase"
   },
   "decision": {
     "accion": "ALERTA_CRITICA",
@@ -143,7 +143,7 @@ El objeto `persistencia` ya viene preparado para guardar el evento enriquecido e
 ```json
 {
   "camara_id": "PC-01",
-  "objeto": "knife",
+  "objeto": "arma_blanca",
   "confianza": 0.91,
   "score_riesgo": 1.0,
   "nivel_riesgo": "CRITICO",
@@ -156,8 +156,8 @@ El objeto `persistencia` ya viene preparado para guardar el evento enriquecido e
     "iluminacion": "baja"
   },
   "tracking": {
-    "person_id": "person_0001",
-    "track_id": "knife_0001"
+    "person_id": "persona_0001",
+    "track_id": "arma_blanca_0001"
   }
 }
 ```
@@ -166,10 +166,12 @@ El objeto `persistencia` ya viene preparado para guardar el evento enriquecido e
 
 El score va de `0` a `100`.
 
-- `gun`: base critica.
-- `knife`: base alta.
-- `scissors`: base media-alta.
-- `person`, `cell_phone`, `backpack`, `car`, `truck`, `motorcycle`: base baja.
+- `fusil`: base critica.
+- `arma`: base alta.
+- `arma_blanca`: base alta.
+- `violencia`: base alta.
+- `multitud` y `persona_sospechosa`: base media.
+- `persona`, `no_violencia`, `cell_phone`, `backpack`, `car`, `truck`, `motorcycle`: base baja.
 - Confianza alta suma puntos.
 - Confianza baja resta puntos.
 - Horario nocturno suma puntos.
@@ -181,12 +183,12 @@ El score va de `0` a `100`.
 
 Niveles:
 
-- `0-24`: `BAJO`
-- `25-49`: `MEDIO`
-- `50-79`: `ALTO`
-- `80-100`: `CRITICO`
+- `0-29`: `BAJO`
+- `30-69`: `MEDIO`
+- `70-89`: `ALTO`
+- `90-100`: `CRITICO`
 
-Importante: una persona o un celular no son sospechosos por si solos. Suben de nivel solo con contexto, horario, objeto peligroso o historial.
+Importante: una persona, `no_violencia` o un celular no son sospechosos por si solos. Suben de nivel solo con contexto, horario, objeto peligroso o historial.
 
 ## Como debe quedar en n8n para camara real
 

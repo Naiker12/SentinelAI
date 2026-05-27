@@ -4,5 +4,12 @@ val: yolo/images/val
 test: yolo/images/test
 
 names:
-  0: NonViolence
-  1: Violence
+  0: arma
+  1: arma_blanca
+  2: fusil
+  3: multitud
+  4: no_violencia
+  5: persona
+  6: persona_sospechosa
+  7: undefined
+  8: violencia

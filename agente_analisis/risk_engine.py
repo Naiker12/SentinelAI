@@ -10,19 +10,21 @@ from agente_analisis.schemas import (
 
 
 OBJECT_BASE_SCORES = {
-    "violence": 70,
-    "nonviolence": 2,
-    "gun": 80,
-    "knife": 60,
-    "scissors": 40,
-    "backpack": 18,
-    "person": 10,
+    "arma": 80,
+    "arma_blanca": 65,
+    "fusil": 95,
+    "violencia": 75,
+    "multitud": 35,
+    "persona_sospechosa": 45,
+    "no_violencia": 2,
+    "persona": 10,
     "cell_phone": 5,
+    "backpack": 18,
     "car": 8,
     "truck": 8,
     "motorcycle": 10,
 }
-DANGEROUS_OBJECTS = {"knife", "gun", "scissors", "violence"}
+DANGEROUS_OBJECTS = {"arma", "arma_blanca", "fusil", "violencia"}
 
 
 def analyze_event(request: AnalysisRequest) -> AnalysisResponse:
@@ -163,9 +165,13 @@ def classify_risk(score: int) -> str:
 def infer_behavior(request: AnalysisRequest, risk_level: str) -> str:
     objeto = normalize_label(request.evento.objeto)
     if risk_level in {"CRITICO", "ALTO"} and objeto in DANGEROUS_OBJECTS:
-        if objeto == "violence":
+        if objeto == "violencia":
             return "posible_pelea_o_agresion"
         return "posible_amenaza_con_objeto_peligroso"
+    if objeto == "multitud":
+        return "aglomeracion_observada"
+    if objeto == "persona_sospechosa":
+        return "persona_conducta_sospechosa"
     if request.memoria.alertas_previas_24h >= 2:
         return "zona_con_alertas_recientes"
     return "evento_observado"
@@ -174,23 +180,32 @@ def infer_behavior(request: AnalysisRequest, risk_level: str) -> str:
 def normalize_label(value: str | None) -> str:
     normalized = str(value or "").strip().lower().replace(" ", "_")
     aliases = {
-        "pistol": "gun",
-        "pistola": "gun",
-        "handgun": "gun",
-        "firearm": "gun",
-        "weapon": "gun",
-        "arma": "gun",
+        "pistol": "arma",
+        "pistola": "arma",
+        "handgun": "arma",
+        "firearm": "arma",
+        "weapon": "arma",
+        "gun": "arma",
+        "rifle": "fusil",
+        "knife": "arma_blanca",
+        "cuchillo": "arma_blanca",
+        "scissors": "arma_blanca",
         "cellphone": "cell_phone",
         "mobile_phone": "cell_phone",
         "phone": "cell_phone",
-        "non_violence": "nonviolence",
-        "non-violence": "nonviolence",
-        "no_violence": "nonviolence",
-        "no-violence": "nonviolence",
-        "normal": "nonviolence",
-        "pelea": "violence",
-        "fight": "violence",
-        "fighting": "violence",
+        "nonviolence": "no_violencia",
+        "non_violence": "no_violencia",
+        "non-violence": "no_violencia",
+        "no_violence": "no_violencia",
+        "no-violence": "no_violencia",
+        "normal": "no_violencia",
+        "person": "persona",
+        "people": "multitud",
+        "crowd": "multitud",
+        "pelea": "violencia",
+        "fight": "violencia",
+        "fighting": "violencia",
+        "violence": "violencia",
     }
     return aliases.get(normalized, normalized)
 

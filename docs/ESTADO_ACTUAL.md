@@ -4,7 +4,7 @@ Fecha: 2026-05-27
 
 ## Estado Actual
 
-SentinelAI queda configurado para trabajar con el modelo propio `best.pt` entrenado en Google Colab para violencia/no violencia.
+SentinelAI queda configurado para trabajar con el modelo multiclase `best.pt` de `yolo_percepcion`.
 
 Flujo activo:
 
@@ -25,7 +25,7 @@ Camara
 - Se elimino `agente_percepcion/tracking.py`.
 - Se movio la memoria temporal a `agente_percepcion/memory.py`.
 - `main.py` usa cooldown por camara+objeto.
-- `SENTINEL_MODEL` apunta a `agente_percepcion/model/best.pt`.
+- `SENTINEL_MODEL` apunta a `yolo_percepcion/entrenamiento_seguridad/weights/best.pt`.
 - El campo `tracking` queda solo como compatibilidad y normalmente viaja vacio.
 - El dashboard reemplaza `AgenteTracking` por `Interfaz Humana`.
 - n8n queda preparado para `review_id`, botones de Telegram y feedback de supervisor.
@@ -46,8 +46,8 @@ Camara
 Ruta esperada:
 
 ```env
-SENTINEL_MODEL=agente_percepcion/model/best.pt
-SENTINEL_CLASSES=violence,nonviolence
+SENTINEL_MODEL=yolo_percepcion/entrenamiento_seguridad/weights/best.pt
+SENTINEL_CLASSES=arma,arma_blanca,fusil,multitud,no_violencia,persona,persona_sospechosa,violencia
 ```
 
-El modelo reporta `NonViolence` y `Violence`; el detector normaliza esas clases a `nonviolence` y `violence`.
+El modelo reporta `arma`, `arma_blanca`, `fusil`, `multitud`, `no_violencia`, `persona`, `persona_sospechosa`, `undefined` y `violencia`. El detector mantiene alias antiguos como compatibilidad.

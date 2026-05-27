@@ -542,11 +542,15 @@ No es un microservicio separado. Es la parte del motor que calcula puntaje.
 Algoritmo:
 
 1. Puntaje base por objeto:
-   - gun: 80
-   - knife: 60
-   - scissors: 40
+   - arma: 80
+   - arma_blanca: 65
+   - fusil: 95
+   - violencia: 75
+   - multitud: 35
+   - persona_sospechosa: 45
+   - no_violencia: 2
    - backpack: 18
-   - person: 10
+   - persona: 10
    - cell_phone: 5
    - car: 8
    - truck: 8
@@ -918,10 +922,10 @@ Integracion en SentinelAI:
    agente_percepcion/model/best.pt
 
 3. Cambiar .env:
-   SENTINEL_MODEL=agente_percepcion/model/best.pt
+   SENTINEL_MODEL=yolo_percepcion/entrenamiento_seguridad/weights/best.pt
 
 4. Ajustar clases:
-   SENTINEL_CLASSES=person,knife,gun,backpack,cell_phone
+   SENTINEL_CLASSES=arma,arma_blanca,fusil,multitud,no_violencia,persona,persona_sospechosa,violencia
 
 5. Probar:
    python -m agente_percepcion.main
@@ -1024,8 +1028,8 @@ Fase 2 - Integrar best.pt
   agente_percepcion/model/best.pt
 
 - Actualizar .env:
-  SENTINEL_MODEL=agente_percepcion/model/best.pt
-  SENTINEL_CLASSES=person,knife,gun,backpack,cell_phone
+  SENTINEL_MODEL=yolo_percepcion/entrenamiento_seguridad/weights/best.pt
+  SENTINEL_CLASSES=arma,arma_blanca,fusil,multitud,no_violencia,persona,persona_sospechosa,violencia
 
 - Probar deteccion con camara.
 

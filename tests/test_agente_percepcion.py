@@ -66,12 +66,15 @@ def test_detection_event_maps_n8n_persistence_to_supabase_row() -> None:
 def test_risk_levels() -> None:
     assert risk_for_label("Violence") == "alto"
     assert risk_for_label("NonViolence") == "bajo"
+    assert risk_for_label("fusil") == "alto"
+    assert risk_for_label("persona_sospechosa") == "medio"
     assert risk_for_label("knife") == "alto"
     assert risk_for_label("gun") == "alto"
     assert risk_for_label("pistol") == "alto"
     assert risk_for_label("pistola") == "alto"
     assert risk_for_label("scissors") == "alto"
     assert risk_for_label("person") == "bajo"
+    assert risk_for_label("persona") == "bajo"
     assert risk_for_label("cell phone") == "bajo"
     assert risk_for_label("cell_phone") == "bajo"
     assert risk_for_label("backpack") == "bajo"
@@ -79,21 +82,22 @@ def test_risk_levels() -> None:
 
 
 def test_detection_labels_normalize_weapon_aliases() -> None:
-    assert normalize_label("pistol") == "gun"
-    assert normalize_label("handgun") == "gun"
-    assert normalize_label("firearm") == "gun"
-    assert normalize_label("pistola") == "gun"
-    assert normalize_label("cell_phone") == "cell phone"
-    assert normalize_label("NonViolence") == "nonviolence"
-    assert normalize_label("pelea") == "violence"
+    assert normalize_label("pistol") == "arma"
+    assert normalize_label("handgun") == "arma"
+    assert normalize_label("firearm") == "arma"
+    assert normalize_label("pistola") == "arma"
+    assert normalize_label("knife") == "arma_blanca"
+    assert normalize_label("cell phone") == "cell_phone"
+    assert normalize_label("NonViolence") == "no_violencia"
+    assert normalize_label("pelea") == "violencia"
 
 
 def test_allowed_classes_normalize_to_detector_labels() -> None:
-    assert _classes("person,knife,gun,cell_phone") == {
-        "person",
-        "knife",
-        "gun",
-        "cell phone",
+    assert _classes("persona,arma_blanca,arma,cell_phone") == {
+        "persona",
+        "arma_blanca",
+        "arma",
+        "cell_phone",
     }
 
 
@@ -192,7 +196,7 @@ def test_detection_event_can_emit_precomputed_analysis_payload() -> None:
     analyzed = event.with_analysis(analyze_event(event.to_analysis_request()))
     payload = analyzed.to_payload()
 
-    assert payload["entrada"]["objeto"] == "gun"
+    assert payload["entrada"]["objeto"] == "arma"
     assert payload["tracking"]["track_id"] == "gun_0001"
     assert payload["resultado"]["nivel_riesgo"] == "CRITICO"
     assert payload["decision"]["accion_tomada"] == "SOLICITAR_VALIDACION_URGENTE"
@@ -213,7 +217,7 @@ def test_storage_path_for_event_is_stable_and_grouped() -> None:
 
     path = _storage_path_for_event(event, local_path="capturas/evento_123.jpg")
 
-    assert path.startswith("PC-01/2026/05/27/violence/")
+    assert path.startswith("PC-01/2026/05/27/violencia/")
     assert path.endswith(".jpg")
 
 

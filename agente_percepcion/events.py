@@ -245,10 +245,13 @@ class N8nClient:
 
 def risk_for_label(label: str) -> str:
     normalized = normalize_label(label)
-    high_risk = {"knife", "scissors", "gun", "violence"}
+    high_risk = {"arma", "arma_blanca", "fusil", "violencia"}
+    medium_risk = {"multitud", "persona_sospechosa"}
 
     if normalized in high_risk:
         return "alto"
+    if normalized in medium_risk:
+        return "medio"
     return "bajo"
 
 

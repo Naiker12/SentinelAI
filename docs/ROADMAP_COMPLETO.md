@@ -5,7 +5,7 @@ Fecha: 2026-05-27
 ## Prioridad Inmediata
 
 1. Usar el modelo propio entrenado en Google Colab.
-2. Confirmar que `SENTINEL_MODEL` apunte a `agente_percepcion/model/best.pt`.
+2. Confirmar que `SENTINEL_MODEL` apunte a `yolo_percepcion/entrenamiento_seguridad/weights/best.pt`.
 3. Probar camara real con `python -m agente_percepcion.main`.
 4. Importar workflow actualizado de n8n.
 5. Configurar Telegram supervisor.
@@ -28,7 +28,7 @@ AgentePercepcion
 
 | Prioridad | Tarea | Resultado esperado |
 |---|---|---|
-| Alta | Probar `best.pt` de violencia | Detectar `Violence` y `NonViolence` en camara real |
+| Alta | Probar `best.pt` multiclase | Detectar `arma`, `arma_blanca`, `fusil`, `multitud`, `no_violencia`, `persona`, `persona_sospechosa` y `violencia` en camara real |
 | Alta | Configurar Telegram | Botones de confirmar/falso positivo/mas revision |
 | Alta | Guardar feedback humano | Tabla `human_reviews` con trazabilidad |
 | Media | Memoria real Supabase | Historial por camara/zona antes del analisis |

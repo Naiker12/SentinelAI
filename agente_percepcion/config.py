@@ -25,12 +25,12 @@ def _as_optional_int(value: str | None) -> int | None:
 
 def _classes(value: str | None) -> set[str]:
     if not value:
-        return {"person"}
+        return {"persona"}
     return {_normalize_class_name(item) for item in value.split(",") if item.strip()}
 
 
 def _normalize_class_name(value: str) -> str:
-    return value.strip().lower().replace("_", " ")
+    return "_".join(value.strip().lower().replace("-", "_").split())
 
 
 @dataclass(frozen=True)
@@ -74,9 +74,12 @@ def get_settings() -> Settings:
         camera_height=_as_optional_int(os.getenv("SENTINEL_CAMERA_HEIGHT")),
         camera_fps=_as_optional_int(os.getenv("SENTINEL_CAMERA_FPS")),
         camera_fourcc=os.getenv("SENTINEL_CAMERA_FOURCC", "MJPG").strip() or None,
-        model_path=os.getenv("SENTINEL_MODEL", "agente_percepcion/model/best.pt"),
+        model_path=os.getenv(
+            "SENTINEL_MODEL",
+            "yolo_percepcion/entrenamiento_seguridad/weights/best.pt",
+        ),
         confidence=float(os.getenv("SENTINEL_CONFIDENCE", "0.5")),
-        classes=_classes(os.getenv("SENTINEL_CLASSES", "person")),
+        classes=_classes(os.getenv("SENTINEL_CLASSES", "persona")),
         event_cooldown_seconds=float(os.getenv("SENTINEL_EVENT_COOLDOWN_SECONDS", "5")),
         scene_zone=os.getenv("SENTINEL_SCENE_ZONE", "sin_zona"),
         scene_lighting=os.getenv("SENTINEL_SCENE_LIGHTING", "desconocida"),

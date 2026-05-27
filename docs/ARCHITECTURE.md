@@ -63,7 +63,7 @@ Entrada:
 ```json
 {
   "evento": {
-    "objeto": "knife",
+    "objeto": "arma_blanca",
     "confianza": 0.91,
     "hora": "2026-05-26T23:40:00Z",
     "camara": "PC-01",
@@ -91,7 +91,7 @@ para orquestacion:
 ```json
 {
   "entrada": {
-    "objeto": "gun",
+    "objeto": "arma",
     "confianza": 0.94,
     "camara": "PC-01",
     "hora": "2026-05-26T23:40:00Z",
@@ -103,7 +103,7 @@ para orquestacion:
     "nivel_riesgo": "CRITICO",
     "score": 120,
     "score_riesgo": 1.2,
-    "algoritmo": "risk_rules_v1"
+    "algoritmo": "risk_rules_v5_seguridad_multiclase"
   },
   "decision": {
     "accion_tomada": "ALERTA_CRITICA",
@@ -112,7 +112,7 @@ para orquestacion:
   },
   "persistencia": {
     "camara_id": "PC-01",
-    "objeto": "gun",
+    "objeto": "arma",
     "nivel_riesgo": "CRITICO"
   }
 }

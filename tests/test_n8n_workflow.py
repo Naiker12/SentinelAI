@@ -99,28 +99,31 @@ def test_agente_analisis_workflow_returns_persistence_contract() -> None:
     assert "review_id" in action_code
 
 
-def test_agente_analisis_workflow_uses_low_base_score_for_cell_phone() -> None:
+def test_agente_analisis_workflow_uses_security_model_base_scores() -> None:
     workflow = json.loads(Path("n8n/AgenteAnalisis.workflow.json").read_text(encoding="utf-8"))
     code_nodes = {node["name"]: node["parameters"]["jsCode"] for node in workflow["nodes"] if node["type"].endswith(".code")}
     risk_code = code_nodes["AgenteRiesgo - Score Hibrido"]
 
     assert "cell_phone: 5" in risk_code
-    assert "person: 10" in risk_code
-    assert "knife: 60" in risk_code
-    assert "gun: 80" in risk_code
-    assert "violence: 70" in risk_code
-    assert "nonviolence: 2" in risk_code
+    assert "persona: 10" in risk_code
+    assert "arma_blanca: 65" in risk_code
+    assert "arma: 80" in risk_code
+    assert "fusil: 95" in risk_code
+    assert "violencia: 75" in risk_code
+    assert "no_violencia: 2" in risk_code
 
 
-def test_agente_analisis_workflow_normalizes_pistol_aliases_to_gun() -> None:
+def test_agente_analisis_workflow_normalizes_aliases_to_security_vocab() -> None:
     workflow = json.loads(Path("n8n/AgenteAnalisis.workflow.json").read_text(encoding="utf-8"))
     code_nodes = {node["name"]: node["parameters"]["jsCode"] for node in workflow["nodes"] if node["type"].endswith(".code")}
     normalize_code = code_nodes["Normalizar Evento"]
 
-    assert "pistol: 'gun'" in normalize_code
-    assert "pistola: 'gun'" in normalize_code
-    assert "handgun: 'gun'" in normalize_code
-    assert "firearm: 'gun'" in normalize_code
+    assert "pistol: 'arma'" in normalize_code
+    assert "pistola: 'arma'" in normalize_code
+    assert "handgun: 'arma'" in normalize_code
+    assert "firearm: 'arma'" in normalize_code
+    assert "knife: 'arma_blanca'" in normalize_code
+    assert "violence: 'violencia'" in normalize_code
 
 
 def test_agente_analisis_workflow_accepts_python_precomputed_result() -> None:
@@ -153,7 +156,7 @@ def test_agente_analisis_workflow_uses_no_tracking_contract() -> None:
     assert "cantidad_personas" in normalize_code
     assert "tracking: {}" in normalize_code
     assert "persona_asociada_objeto_peligroso" not in risk_code
-    assert "risk_rules_v4_no_tracking" in risk_code
+    assert "risk_rules_v5_seguridad_multiclase" in risk_code
     assert "AgenteInterfazHumana" in action_code
 
 
@@ -187,8 +190,9 @@ def test_n8n_ia_code_snippets_are_present() -> None:
     assert "prompt_ia" in prepare.read_text(encoding="utf-8")
     assert "payload.entrada && payload.resultado && payload.decision" in prepare.read_text(encoding="utf-8")
     assert "parsed.resultado && parsed.decision && parsed.persistencia" in risk.read_text(encoding="utf-8")
-    assert 'pistol: "gun"' in prepare.read_text(encoding="utf-8")
-    assert 'pistol: "gun"' in risk.read_text(encoding="utf-8")
+    assert 'pistol: "arma"' in prepare.read_text(encoding="utf-8")
+    assert 'pistol: "arma"' in risk.read_text(encoding="utf-8")
+    assert 'fusil: 95' in prepare.read_text(encoding="utf-8")
     assert "risk_rules_v2_plus_llm_guarded" in parser.read_text(encoding="utf-8")
     assert "risk_rules_v3_history_llm_guarded" in risk.read_text(encoding="utf-8")
     assert "score_riesgo" in memory.read_text(encoding="utf-8")

@@ -12,7 +12,7 @@ load_dotenv()
 
 
 LEVEL_ORDER = ["BAJO", "MEDIO", "ALTO", "CRITICO"]
-OBJECTS = ["person", "knife", "gun", "backpack", "cell_phone", "scissors"]
+OBJECTS = ["persona", "persona_sospechosa", "multitud", "arma", "arma_blanca", "fusil", "no_violencia", "violencia"]
 CAMERAS = ["PC-01", "CAM-02", "CAM-03", "CAM-04"]
 ZONES = ["Entrada principal", "Pasillo central", "Patio trasero", "Estacionamiento"]
 ACTIONS = {
@@ -22,16 +22,25 @@ ACTIONS = {
     "CRITICO": "ALERTA_CRITICA",
 }
 RISK_BASE = {
-    "violence": 0.80,
-    "nonviolence": 0.05,
-    "gun": 0.95,
-    "knife": 0.80,
-    "scissors": 0.50,
-    "backpack": 0.35,
+    "arma": 0.88,
+    "arma_blanca": 0.75,
+    "fusil": 0.97,
+    "multitud": 0.45,
+    "no_violencia": 0.05,
+    "persona": 0.20,
+    "persona_sospechosa": 0.55,
+    "violencia": 0.85,
     "cell_phone": 0.15,
-    "person": 0.20,
 }
 OBJECT_LABELS = {
+    "arma": "Arma",
+    "arma_blanca": "Arma blanca",
+    "fusil": "Fusil",
+    "multitud": "Multitud",
+    "no_violencia": "No violencia",
+    "violencia": "Violencia",
+    "persona": "Persona",
+    "persona_sospechosa": "Persona sospechosa",
     "violence": "Violencia",
     "nonviolence": "No violencia",
     "non violence": "No violencia",
@@ -88,7 +97,7 @@ def generate_events(count: int = 300) -> pd.DataFrame:
 
     for _ in range(count):
         timestamp = now - timedelta(hours=random.expovariate(0.15))
-        obj = random.choices(OBJECTS, weights=[40, 12, 5, 18, 20, 5])[0]
+        obj = random.choices(OBJECTS, weights=[35, 10, 8, 5, 8, 2, 20, 12])[0]
         camera_index = random.randint(0, len(CAMERAS) - 1)
         camera = CAMERAS[camera_index]
         zone = ZONES[camera_index]
@@ -103,7 +112,7 @@ def generate_events(count: int = 300) -> pd.DataFrame:
         level = level_from_score(score)
 
         tracking_ids.setdefault(camera, [])
-        if obj == "person":
+        if obj in {"persona", "persona_sospechosa"}:
             if not tracking_ids[camera] or random.random() < 0.3:
                 track_id = f"T{random.randint(100, 999)}"
                 tracking_ids[camera].append(track_id)

@@ -4,6 +4,16 @@ Este flujo usa IA como analista contextual, pero la decision final la valida
 el motor de reglas con historial y limites. Para riesgos `MEDIO`, `ALTO` y
 `CRITICO`, la accion final queda bloqueada hasta que un supervisor humano valide.
 
+El vocabulario activo del modelo `yolo_percepcion` es:
+
+```text
+arma, arma_blanca, fusil, multitud, no_violencia, persona,
+persona_sospechosa, undefined, violencia
+```
+
+Las reglas aceptan alias del modelo viejo (`Violence`, `NonViolence`) y de objetos
+en ingles (`gun`, `knife`, `person`), pero normalizan todo a las clases nuevas.
+
 ## Flujo importable actual
 
 ```text

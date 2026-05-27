@@ -1,2 +1,9 @@
-NonViolence
-Violence
+arma
+arma_blanca
+fusil
+multitud
+no_violencia
+persona
+persona_sospechosa
+undefined
+violencia

@@ -5,7 +5,7 @@ if (parsed.resultado && parsed.decision && parsed.persistencia) {
 const historyRows = $input.all().map((item) => item.json ?? {});
 
 const riskRank = { BAJO: 0, MEDIO: 1, ALTO: 2, CRITICO: 3 };
-const dangerousObjects = new Set(["gun", "knife", "scissors", "violence"]);
+const dangerousObjects = new Set(["arma", "arma_blanca", "fusil", "violencia"]);
 
 function clamp(value, min, max, fallback) {
   const parsedNumber = Number(value);
@@ -16,23 +16,32 @@ function clamp(value, min, max, fallback) {
 function normalizeObject(value) {
   const normalized = String(value ?? "").trim().toLowerCase().replace(/[_\s]+/g, "_");
   const aliases = {
-    pistol: "gun",
-    pistola: "gun",
-    handgun: "gun",
-    firearm: "gun",
-    weapon: "gun",
-    arma: "gun",
+    pistol: "arma",
+    pistola: "arma",
+    handgun: "arma",
+    firearm: "arma",
+    weapon: "arma",
+    gun: "arma",
+    rifle: "fusil",
+    knife: "arma_blanca",
+    cuchillo: "arma_blanca",
+    scissors: "arma_blanca",
     cellphone: "cell_phone",
     mobile_phone: "cell_phone",
     phone: "cell_phone",
-    non_violence: "nonviolence",
-    "non-violence": "nonviolence",
-    no_violence: "nonviolence",
-    "no-violence": "nonviolence",
-    normal: "nonviolence",
-    pelea: "violence",
-    fight: "violence",
-    fighting: "violence",
+    nonviolence: "no_violencia",
+    non_violence: "no_violencia",
+    "non-violence": "no_violencia",
+    no_violence: "no_violencia",
+    "no-violence": "no_violencia",
+    normal: "no_violencia",
+    person: "persona",
+    people: "multitud",
+    crowd: "multitud",
+    pelea: "violencia",
+    fight: "violencia",
+    fighting: "violencia",
+    violence: "violencia",
   };
   return aliases[normalized] ?? normalized;
 }
@@ -156,7 +165,7 @@ if (previousEvents24h >= 20) {
   );
 }
 
-if (object === "person" && !dangerousObjects.has(object) && confidence < 0.7) {
+if (object === "persona" && !dangerousObjects.has(object) && confidence < 0.7) {
   score -= addFactor(
     factors,
     8,

@@ -92,8 +92,8 @@ def _draw_label(frame: MatLike, text: str, x: int, y: int, color: tuple[int, int
 
 def _color_for_label(label: str) -> tuple[int, int, int]:
     normalized = normalize_label(label)
-    high_risk = {"knife", "gun", "scissors", "violence"}
-    medium_risk = {"person", "car", "truck", "backpack", "cell phone"}
+    high_risk = {"arma", "arma_blanca", "fusil", "violencia", "knife", "gun", "scissors", "violence"}
+    medium_risk = {"multitud", "persona_sospechosa", "person", "persona", "car", "truck", "backpack", "cell_phone"}
 
     if normalized in high_risk:
         return (35, 35, 230)
@@ -103,25 +103,32 @@ def _color_for_label(label: str) -> tuple[int, int, int]:
 
 
 def normalize_label(label: str) -> str:
-    normalized = label.strip().lower().replace("_", " ")
+    normalized = "_".join(label.strip().lower().replace("-", "_").split())
     aliases = {
-        "pistol": "gun",
-        "handgun": "gun",
-        "firearm": "gun",
-        "weapon": "gun",
-        "arma": "gun",
-        "pistola": "gun",
-        "cellphone": "cell phone",
-        "mobile phone": "cell phone",
-        "phone": "cell phone",
-        "non violence": "nonviolence",
-        "non-violence": "nonviolence",
-        "no violence": "nonviolence",
-        "no-violence": "nonviolence",
-        "normal": "nonviolence",
-        "pelea": "violence",
-        "fight": "violence",
-        "fighting": "violence",
+        "pistol": "arma",
+        "handgun": "arma",
+        "firearm": "arma",
+        "weapon": "arma",
+        "gun": "arma",
+        "pistola": "arma",
+        "rifle": "fusil",
+        "knife": "arma_blanca",
+        "cuchillo": "arma_blanca",
+        "scissors": "arma_blanca",
+        "cellphone": "cell_phone",
+        "mobile_phone": "cell_phone",
+        "phone": "cell_phone",
+        "nonviolence": "no_violencia",
+        "non_violence": "no_violencia",
+        "no_violence": "no_violencia",
+        "normal": "no_violencia",
+        "person": "persona",
+        "people": "multitud",
+        "crowd": "multitud",
+        "pelea": "violencia",
+        "fight": "violencia",
+        "fighting": "violencia",
+        "violence": "violencia",
     }
     return aliases.get(normalized, normalized)
 

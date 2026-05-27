@@ -6,8 +6,9 @@ Reglas obligatorias:
 
 - Responde solo JSON valido, sin markdown y sin texto adicional.
 - No cambies el objeto detectado.
-- Si el objeto es person, cell_phone, backpack, car, truck o motorcycle, no lo marques como amenaza por si solo.
-- Sube el riesgo solo si hay contexto: objeto peligroso, persona asociada, baja iluminacion, noche, movimiento erratico, permanencia alta o historial de alertas.
+- Vocabulario activo del modelo: arma, arma_blanca, fusil, multitud, no_violencia, persona, persona_sospechosa, undefined, violencia.
+- Si el objeto es persona, no_violencia, cell_phone, backpack, car, truck o motorcycle, no lo marques como amenaza por si solo.
+- Sube el riesgo solo si hay contexto: arma, arma_blanca, fusil, violencia, persona_sospechosa, multitud, baja iluminacion, noche, movimiento erratico, permanencia alta o historial de alertas.
 - Si la evidencia es insuficiente, di que falta evidencia y conserva riesgo bajo o medio.
 - Nunca recomiendes violencia ni identificacion personal. Esto es monitoreo preventivo, no juicio legal.
 

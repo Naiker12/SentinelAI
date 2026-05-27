@@ -15,7 +15,7 @@ from agente_analisis.schemas import (
 def test_analysis_marks_weapon_at_night_as_critical() -> None:
     request = AnalysisRequest(
         evento=PerceptionEvent(
-            objeto="knife",
+            objeto="arma_blanca",
             confianza=0.94,
             hora=datetime(2026, 5, 26, 23, 40, tzinfo=timezone.utc),
             camara="PC-01",
@@ -90,14 +90,14 @@ def test_analysis_normalizes_pistol_alias_to_gun() -> None:
     response = analyze_event(request)
 
     assert response.result.risk_level == "CRITICO"
-    assert any(factor.detail == "Objeto detectado: gun." for factor in response.result.factors)
+    assert any(factor.detail == "Objeto detectado: arma." for factor in response.result.factors)
     assert response.decision.requires_human_review is True
 
 
 def test_analysis_sends_medium_risk_to_human_supervisor() -> None:
     request = AnalysisRequest(
         evento=PerceptionEvent(
-            objeto="scissors",
+            objeto="arma_blanca",
             confianza=0.82,
             hora=datetime(2026, 5, 26, 15, 30, tzinfo=timezone.utc),
             camara="PC-01",
@@ -106,9 +106,9 @@ def test_analysis_sends_medium_risk_to_human_supervisor() -> None:
 
     response = analyze_event(request)
 
-    assert response.result.risk_level == "MEDIO"
-    assert response.decision.action == "SOLICITAR_REVISION_HUMANA"
-    assert response.decision.channels == ["telegram_supervisor"]
+    assert response.result.risk_level == "ALTO"
+    assert response.decision.action == "SOLICITAR_VALIDACION_HUMANA"
+    assert response.decision.channels == ["telegram_supervisor", "dashboard_realtime"]
     assert response.decision.requires_human_review is True
     assert response.decision.human_review_status == "PENDIENTE"
 
@@ -154,3 +154,20 @@ def test_analysis_marks_nonviolence_as_low_risk() -> None:
 
     assert response.result.risk_level == "BAJO"
     assert response.decision.requires_human_review is False
+
+
+def test_analysis_marks_persona_sospechosa_as_medium_risk() -> None:
+    request = AnalysisRequest(
+        evento=PerceptionEvent(
+            objeto="persona_sospechosa",
+            confianza=0.84,
+            hora=datetime(2026, 5, 27, 16, 30, tzinfo=timezone.utc),
+            camara="PC-01",
+        )
+    )
+
+    response = analyze_event(request)
+
+    assert response.result.risk_level == "MEDIO"
+    assert response.result.possible_behavior == "persona_conducta_sospechosa"
+    assert response.decision.requires_human_review is True

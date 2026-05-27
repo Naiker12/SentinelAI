@@ -2,12 +2,19 @@
 
 Dataset propio para entrenar el modelo `best.pt` de SentinelAI con Roboflow o Google Colab.
 
-Clases activas del modelo entrenado `proyecto_violence_v4`:
+Clases activas del modelo nuevo `yolo_percepcion`:
 
-- `NonViolence`
-- `Violence`
+- `arma`
+- `arma_blanca`
+- `fusil`
+- `multitud`
+- `no_violencia`
+- `persona`
+- `persona_sospechosa`
+- `undefined`
+- `violencia`
 
-Los escenarios como `normal`, `pelea`, `robo`, `objeto_sospechoso` y `objeto_no_sospechoso` pueden servir para ordenar capturas, pero el modelo actual se consume como detector binario de violencia/no violencia.
+El modelo ya no se consume como detector binario. Las reglas de riesgo usan estas clases para distinguir armas, armas blancas, fusil, multitud, persona sospechosa, violencia y no violencia.
 
 Estructura esperada:
 
@@ -36,5 +43,5 @@ model.train(data="dataset/data.yaml", epochs=50, imgsz=640)
 Modelo activo actual:
 
 ```text
-D:\SentinelAI\proyecto_violence_v4\entrenamiento_violence-3\weights\best.pt
+D:\SentinelAI\yolo_percepcion\entrenamiento_seguridad\weights\best.pt
 ```

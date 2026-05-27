@@ -85,7 +85,7 @@ def run() -> None:
                         "zona": settings.scene_zone,
                         "iluminacion": settings.scene_lighting,
                         "cantidad_personas": sum(
-                            1 for item in detections if item.label == "person"
+                            1 for item in detections if item.label == "persona"
                         ),
                     },
                     tracking=None,
