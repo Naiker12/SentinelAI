@@ -49,6 +49,7 @@ def detect_once() -> dict:
         debug_detections=settings.debug_detections,
         debug_confidence=settings.debug_confidence,
         show_filtered_detections=settings.show_filtered_detections,
+        debug_filtered_classes=settings.debug_filtered_classes,
         use_model_tracking=settings.yolo_tracking,
         tracker=settings.yolo_tracker,
     )

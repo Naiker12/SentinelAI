@@ -305,6 +305,41 @@ def test_detector_can_return_filtered_detections_for_debug_overlay(monkeypatch) 
     assert detections[0].filtered_reason == "conf<0.35"
 
 
+def test_detector_hides_filtered_debug_classes_not_in_allowlist(monkeypatch) -> None:
+    from agente_percepcion import detector as detector_module
+    from agente_percepcion.detector import YoloDetector
+
+    class FakeBox:
+        cls = [0]
+        conf = [0.12]
+        xyxy = [[10, 20, 30, 40]]
+
+    class FakeModel:
+        names = {0: "persona"}
+
+        def predict(self, frame, conf, verbose):
+            return [type("Result", (), {"names": self.names, "boxes": [FakeBox()]})()]
+
+    monkeypatch.setattr(detector_module, "_configure_ultralytics_runtime", lambda: None)
+    monkeypatch.setitem(
+        sys.modules,
+        "ultralytics",
+        types.SimpleNamespace(YOLO=lambda model_path: FakeModel()),
+    )
+
+    detector = YoloDetector(
+        "yolov8n.pt",
+        confidence=0.25,
+        dangerous_confidence=0.35,
+        allowed_classes={"persona"},
+        use_model_tracking=False,
+        show_filtered_detections=True,
+        debug_filtered_classes={"arma", "undefined"},
+    )
+
+    assert detector.detect(np.zeros((10, 10, 3), dtype=np.uint8)) == []
+
+
 def test_n8n_without_webhook_does_not_send() -> None:
     event = DetectionEvent(
         objeto="person",

@@ -51,6 +51,7 @@ class Settings:
     debug_detections: bool
     debug_confidence: float
     show_filtered_detections: bool
+    debug_filtered_classes: set[str]
     yolo_tracking: bool
     yolo_tracker: str
     classes: set[str]
@@ -98,6 +99,12 @@ def get_settings() -> Settings:
         show_filtered_detections=_as_bool(
             os.getenv("SENTINEL_SHOW_FILTERED_DETECTIONS"),
             default=False,
+        ),
+        debug_filtered_classes=_classes(
+            os.getenv(
+                "SENTINEL_DEBUG_FILTERED_CLASSES",
+                "arma,arma_blanca,fusil,violencia,persona_sospechosa,undefined",
+            )
         ),
         yolo_tracking=_as_bool(os.getenv("SENTINEL_YOLO_TRACKING"), default=True),
         yolo_tracker=os.getenv("SENTINEL_YOLO_TRACKER", "botsort.yaml").strip() or "botsort.yaml",

@@ -28,6 +28,7 @@ class YoloDetector:
         debug_detections: bool = False,
         debug_confidence: float = 0.15,
         show_filtered_detections: bool = False,
+        debug_filtered_classes: set[str] | None = None,
         use_model_tracking: bool = True,
         tracker: str = "botsort.yaml",
     ) -> None:
@@ -47,6 +48,7 @@ class YoloDetector:
         self._debug_detections = debug_detections
         self._debug_confidence = debug_confidence
         self._show_filtered_detections = show_filtered_detections
+        self._debug_filtered_classes = debug_filtered_classes or set()
         self._use_model_tracking = use_model_tracking
         self._tracker = tracker
         print(f"Modelo YOLO: {model_path}")
@@ -94,7 +96,7 @@ class YoloDetector:
                     xyxy = xyxy.tolist()
                 x1, y1, x2, y2 = (int(value) for value in xyxy)
                 track_id = _track_id_from_box(box, label)
-                if filtered_reasons and not self._show_filtered_detections:
+                if filtered_reasons and not self._should_show_filtered(label):
                     continue
                 detections.append(
                     Detection(
@@ -121,6 +123,11 @@ class YoloDetector:
         if self._debug_detections:
             return min(floor, self._debug_confidence)
         return floor
+
+    def _should_show_filtered(self, label: str) -> bool:
+        if not self._show_filtered_detections:
+            return False
+        return not self._debug_filtered_classes or normalize_label(label) in self._debug_filtered_classes
 
 
 def draw_detections(frame: MatLike, detections: list[Detection]) -> MatLike:
