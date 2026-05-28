@@ -44,10 +44,15 @@ class Settings:
     camera_fps: int | None
     camera_fourcc: str | None
     camera_drop_stale_frames: int
+    camera_threaded: bool
+    camera_read_timeout_seconds: float
     model_path: str
     confidence: float
     dangerous_confidence: float
     inference_confidence: float
+    yolo_imgsz: int | None
+    yolo_device: str | None
+    yolo_half: bool
     debug_detections: bool
     debug_confidence: float
     debug_print_interval_seconds: float
@@ -90,6 +95,8 @@ def get_settings() -> Settings:
         camera_fps=_as_optional_int(os.getenv("SENTINEL_CAMERA_FPS")),
         camera_fourcc=os.getenv("SENTINEL_CAMERA_FOURCC", "MJPG").strip() or None,
         camera_drop_stale_frames=int(os.getenv("SENTINEL_CAMERA_DROP_STALE_FRAMES", "2")),
+        camera_threaded=_as_bool(os.getenv("SENTINEL_CAMERA_THREADED"), default=True),
+        camera_read_timeout_seconds=float(os.getenv("SENTINEL_CAMERA_READ_TIMEOUT_SECONDS", "2.0")),
         model_path=os.getenv(
             "SENTINEL_MODEL",
             "yolo_percepcion/entrenamiento_seguridad/weights/best.pt",
@@ -97,6 +104,9 @@ def get_settings() -> Settings:
         confidence=float(os.getenv("SENTINEL_CONFIDENCE", "0.25")),
         dangerous_confidence=float(os.getenv("SENTINEL_DANGEROUS_CONFIDENCE", "0.35")),
         inference_confidence=float(os.getenv("SENTINEL_INFERENCE_CONFIDENCE", "0.20")),
+        yolo_imgsz=_as_optional_int(os.getenv("SENTINEL_YOLO_IMGSZ")),
+        yolo_device=os.getenv("SENTINEL_YOLO_DEVICE", "").strip() or None,
+        yolo_half=_as_bool(os.getenv("SENTINEL_YOLO_HALF"), default=False),
         debug_detections=_as_bool(os.getenv("SENTINEL_DEBUG_DETECTIONS"), default=False),
         debug_confidence=float(os.getenv("SENTINEL_DEBUG_CONFIDENCE", "0.15")),
         debug_print_interval_seconds=float(

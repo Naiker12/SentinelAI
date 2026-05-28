@@ -26,6 +26,9 @@ class YoloDetector:
         allowed_classes: set[str],
         dangerous_confidence: float = 0.35,
         inference_confidence: float = 0.20,
+        imgsz: int | None = None,
+        device: str | None = None,
+        half: bool = False,
         debug_detections: bool = False,
         debug_confidence: float = 0.15,
         debug_print_interval_seconds: float = 1.0,
@@ -46,6 +49,9 @@ class YoloDetector:
         self._confidence = confidence
         self._dangerous_confidence = dangerous_confidence
         self._inference_confidence = inference_confidence
+        self._imgsz = imgsz
+        self._device = device
+        self._half = half
         self._allowed_classes = allowed_classes
         self._debug_detections = debug_detections
         self._debug_confidence = debug_confidence
@@ -65,16 +71,16 @@ class YoloDetector:
 
     def detect(self, frame: MatLike) -> list[Detection]:
         predict_confidence = self._predict_confidence()
+        inference_kwargs = self._inference_kwargs(predict_confidence)
         if self._use_model_tracking and hasattr(self._model, "track"):
             results = self._model.track(
                 frame,
-                conf=predict_confidence,
-                verbose=False,
                 persist=True,
                 tracker=self._tracker,
+                **inference_kwargs,
             )
         else:
-            results = self._model.predict(frame, conf=predict_confidence, verbose=False)
+            results = self._model.predict(frame, **inference_kwargs)
         detections: list[Detection] = []
         debug_rows: list[str] = []
 
@@ -127,6 +133,20 @@ class YoloDetector:
         if self._debug_detections:
             return min(floor, self._debug_confidence)
         return floor
+
+    def _inference_kwargs(self, confidence: float) -> dict:
+        kwargs = {
+            "conf": confidence,
+            "verbose": False,
+            "stream": True,
+        }
+        if self._imgsz:
+            kwargs["imgsz"] = self._imgsz
+        if self._device:
+            kwargs["device"] = self._device
+        if self._half:
+            kwargs["half"] = True
+        return kwargs
 
     def _should_show_filtered(self, label: str) -> bool:
         if not self._show_filtered_detections:

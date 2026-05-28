@@ -46,6 +46,9 @@ def detect_once() -> dict:
         settings.classes,
         dangerous_confidence=settings.dangerous_confidence,
         inference_confidence=settings.inference_confidence,
+        imgsz=settings.yolo_imgsz,
+        device=settings.yolo_device,
+        half=settings.yolo_half,
         debug_detections=settings.debug_detections,
         debug_confidence=settings.debug_confidence,
         debug_print_interval_seconds=settings.debug_print_interval_seconds,
@@ -67,6 +70,8 @@ def detect_once() -> dict:
         fps=settings.camera_fps,
         fourcc=settings.camera_fourcc,
         drop_stale_frames=settings.camera_drop_stale_frames,
+        threaded=settings.camera_threaded,
+        read_timeout_seconds=settings.camera_read_timeout_seconds,
     ) as camera:
         frame = camera.read()
         detections = [

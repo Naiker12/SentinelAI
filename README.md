@@ -125,6 +125,7 @@ SENTINEL_CAMERA_HEIGHT=480
 SENTINEL_CAMERA_FPS=30
 SENTINEL_CAMERA_FOURCC=MJPG
 SENTINEL_CAMERA_DROP_STALE_FRAMES=2
+SENTINEL_CAMERA_THREADED=true
 ```
 
 Si sigue corrupta, cambia `SENTINEL_CAMERA_INDEX=1` o usa `SENTINEL_CAMERA_FOURCC=YUY2`.
@@ -137,6 +138,10 @@ detecciones de baja confianza y que SentinelAI filtre despues:
 SENTINEL_CAMERA_WIDTH=640
 SENTINEL_CAMERA_HEIGHT=480
 SENTINEL_CAMERA_DROP_STALE_FRAMES=2
+SENTINEL_CAMERA_THREADED=true
+SENTINEL_YOLO_IMGSZ=640
+SENTINEL_YOLO_DEVICE=
+SENTINEL_YOLO_HALF=false
 SENTINEL_CONFIDENCE=0.25
 SENTINEL_DANGEROUS_CONFIDENCE=0.35
 SENTINEL_INFERENCE_CONFIDENCE=0.20
@@ -150,6 +155,9 @@ SENTINEL_EVENT_QUEUE_MAXSIZE=20
 `SENTINEL_INFERENCE_CONFIDENCE` es el umbral que se pasa a YOLO/Ultralytics.
 `SENTINEL_CONFIDENCE` y `SENTINEL_DANGEROUS_CONFIDENCE` son el filtro final de
 SentinelAI. Esta separacion evita descartar armas borrosas antes de analizarlas.
+`SENTINEL_CAMERA_THREADED=true` mantiene la webcam drenada en segundo plano para
+usar el frame mas reciente y evitar retraso acumulado. Si la GPU esta disponible,
+puedes fijar `SENTINEL_YOLO_DEVICE=0`; deja `SENTINEL_YOLO_HALF=false` en CPU.
 Con `SENTINEL_SHOW_FILTERED_DETECTIONS=true`, las detecciones que YOLO ve pero
 SentinelAI filtra se dibujan en gris con el motivo, sin enviarse a Telegram/n8n.
 El intervalo de debug evita saturar la consola, y la cola de eventos permite que

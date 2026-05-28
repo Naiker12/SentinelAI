@@ -128,7 +128,7 @@ def test_debug_detector_uses_lower_predict_confidence(monkeypatch) -> None:
     class FakeModel:
         names = {0: "arma"}
 
-        def predict(self, frame, conf, verbose):
+        def predict(self, frame, conf, verbose, stream=False, **kwargs):
             calls.append(conf)
             return [type("Result", (), {"names": self.names, "boxes": [FakeBox()]})()]
 
@@ -163,7 +163,7 @@ def test_detector_applies_higher_threshold_to_dangerous_objects(monkeypatch) -> 
     class FakeModel:
         names = {0: "arma"}
 
-        def predict(self, frame, conf, verbose):
+        def predict(self, frame, conf, verbose, stream=False, **kwargs):
             return [type("Result", (), {"names": self.names, "boxes": [FakeBox()]})()]
 
     monkeypatch.setattr(detector_module, "_configure_ultralytics_runtime", lambda: None)
@@ -206,8 +206,8 @@ def test_detector_uses_ultralytics_tracking_when_available(monkeypatch) -> None:
     class FakeModel:
         names = {0: "arma"}
 
-        def track(self, frame, conf, verbose, persist, tracker):
-            calls.append((conf, persist, tracker))
+        def track(self, frame, conf, verbose, persist, tracker, stream=False, **kwargs):
+            calls.append((conf, persist, tracker, stream))
             return [type("Result", (), {"names": self.names, "boxes": [FakeBox()]})()]
 
     monkeypatch.setattr(detector_module, "_configure_ultralytics_runtime", lambda: None)
@@ -226,7 +226,7 @@ def test_detector_uses_ultralytics_tracking_when_available(monkeypatch) -> None:
 
     detections = detector.detect(np.zeros((10, 10, 3), dtype=np.uint8))
 
-    assert calls == [(0.2, True, "botsort.yaml")]
+    assert calls == [(0.2, True, "botsort.yaml", True)]
     assert detections[0].tracking == {"track_id": "arma_0007"}
 
 
@@ -244,7 +244,7 @@ def test_detector_uses_low_inference_confidence_but_keeps_final_filter(monkeypat
     class FakeModel:
         names = {0: "arma"}
 
-        def predict(self, frame, conf, verbose):
+        def predict(self, frame, conf, verbose, stream=False, **kwargs):
             calls.append(conf)
             return [type("Result", (), {"names": self.names, "boxes": [FakeBox()]})()]
 
@@ -280,7 +280,7 @@ def test_detector_can_return_filtered_detections_for_debug_overlay(monkeypatch) 
     class FakeModel:
         names = {0: "arma"}
 
-        def predict(self, frame, conf, verbose):
+        def predict(self, frame, conf, verbose, stream=False, **kwargs):
             return [type("Result", (), {"names": self.names, "boxes": [FakeBox()]})()]
 
     monkeypatch.setattr(detector_module, "_configure_ultralytics_runtime", lambda: None)
@@ -318,7 +318,7 @@ def test_detector_hides_filtered_debug_classes_not_in_allowlist(monkeypatch) -> 
     class FakeModel:
         names = {0: "persona"}
 
-        def predict(self, frame, conf, verbose):
+        def predict(self, frame, conf, verbose, stream=False, **kwargs):
             return [type("Result", (), {"names": self.names, "boxes": [FakeBox()]})()]
 
     monkeypatch.setattr(detector_module, "_configure_ultralytics_runtime", lambda: None)

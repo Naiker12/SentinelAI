@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import platform
+import threading
 import time
 from dataclasses import dataclass
 
@@ -18,11 +19,29 @@ class Camera:
     fourcc: str | None = "MJPG"
     drop_stale_frames: int = 0
     read_retries: int = 15
+    threaded: bool = True
+    read_timeout_seconds: float = 2.0
 
     def __post_init__(self) -> None:
         self._capture = self._open_capture()
+        self._latest_frame: MatLike | None = None
+        self._latest_lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._reader_thread: threading.Thread | None = None
+        if self.threaded:
+            self._reader_thread = threading.Thread(target=self._reader_loop, daemon=True)
+            self._reader_thread.start()
 
     def read(self) -> MatLike:
+        if self.threaded:
+            frame = self._read_latest_frame()
+            if frame is not None:
+                return frame
+            raise RuntimeError(
+                "No se pudo leer un frame reciente de la camara. "
+                "Prueba SENTINEL_CAMERA_THREADED=false o cambia el backend."
+            )
+
         self._drop_stale_frames()
         frame = self._read_with_retries(self._capture)
         if frame is None:
@@ -33,6 +52,9 @@ class Camera:
         return frame
 
     def release(self) -> None:
+        self._stop_event.set()
+        if self._reader_thread and self._reader_thread.is_alive():
+            self._reader_thread.join(timeout=1)
         self._capture.release()
 
     def __enter__(self) -> "Camera":
@@ -78,6 +100,25 @@ class Camera:
         for _ in range(max(0, self.drop_stale_frames)):
             if not self._capture.grab():
                 break
+
+    def _reader_loop(self) -> None:
+        while not self._stop_event.is_set():
+            frame = self._read_with_retries(self._capture)
+            if frame is None:
+                time.sleep(0.02)
+                continue
+            with self._latest_lock:
+                self._latest_frame = frame
+
+    def _read_latest_frame(self) -> MatLike | None:
+        deadline = time.monotonic() + max(0.1, self.read_timeout_seconds)
+        while time.monotonic() < deadline:
+            with self._latest_lock:
+                frame = self._latest_frame
+            if frame is not None:
+                return frame.copy()
+            time.sleep(0.01)
+        return None
 
 
 def _backend_candidates(preferred: str) -> list[tuple[str, int]]:
