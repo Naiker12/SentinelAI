@@ -17,6 +17,7 @@ from agente_percepcion.events import (
     N8nClient,
     SupabaseEventStore,
     SupabaseEvidenceStore,
+    SupabaseHumanReviewStore,
     risk_for_label,
 )
 from agente_percepcion.memory import EventMemory, should_emit_detection
@@ -47,6 +48,7 @@ def run() -> None:
         inference_confidence=settings.inference_confidence,
         debug_detections=settings.debug_detections,
         debug_confidence=settings.debug_confidence,
+        debug_print_interval_seconds=settings.debug_print_interval_seconds,
         show_filtered_detections=settings.show_filtered_detections,
         debug_filtered_classes=settings.debug_filtered_classes,
         use_model_tracking=settings.yolo_tracking,
@@ -62,6 +64,11 @@ def run() -> None:
         settings.supabase_service_role_key,
         settings.supabase_storage_bucket,
     )
+    human_review_store = SupabaseHumanReviewStore(
+        settings.supabase_url,
+        settings.supabase_service_role_key,
+        settings.supabase_human_reviews_table,
+    )
     n8n = N8nClient(
         settings.n8n_webhook_url,
         allow_test_webhook=settings.allow_n8n_test_webhook,
@@ -72,10 +79,22 @@ def run() -> None:
     memory_lock = threading.Lock()
     last_event_at: dict[str, float] = {}
     last_danger: tuple[float, Detection] | None = None
-    event_queue: queue.Queue[tuple[DetectionEvent, object, float] | None] = queue.Queue()
+    event_queue: queue.Queue[tuple[DetectionEvent, float] | None] = queue.Queue(
+        maxsize=max(1, settings.event_queue_maxsize)
+    )
     worker = threading.Thread(
         target=_event_worker,
-        args=(settings, evidence_store, telegram, n8n, store, memory, memory_lock, event_queue),
+        args=(
+            settings,
+            evidence_store,
+            telegram,
+            n8n,
+            store,
+            human_review_store,
+            memory,
+            memory_lock,
+            event_queue,
+        ),
         daemon=True,
     )
     worker.start()
@@ -117,11 +136,9 @@ def run() -> None:
             annotated_frame = draw_detections(frame.copy(), [*accepted_detections, *filtered_detections])
             for review_id in telegram.consume_review_snapshot_requests():
                 image_path = _save_frame(settings.image_dir, annotated_frame)
-                result = telegram.send_review_snapshot(review_id, image_path)
-                if result.sent:
-                    print(f"Telegram recibio captura adicional para revision: {review_id}")
-                else:
-                    print(f"No se pudo enviar captura adicional: {result.error}")
+                _send_review_snapshot_async(telegram, review_id, image_path)
+            for decision in telegram.consume_review_decisions():
+                _record_human_review_decision_async(human_review_store, decision)
 
             for detection in accepted_detections:
                 if not _is_alertable_detection(detection.label):
@@ -137,17 +154,9 @@ def run() -> None:
                 ):
                     continue
 
-                image_path = (
-                    _save_frame(settings.image_dir, annotated_frame)
-                    if settings.save_images or risk_for_label(detection.label) == "alto"
-                    else None
-                )
+                image_path = _save_frame(settings.image_dir, annotated_frame)
                 with memory_lock:
                     memory_snapshot = memory.snapshot(now)
-                memory_snapshot = {
-                    **memory_snapshot,
-                    "knn_samples": _historical_knn_samples(store),
-                }
                 event = DetectionEvent.from_detection(
                     detection,
                     camera_name=settings.camera_name,
@@ -162,16 +171,13 @@ def run() -> None:
                     tracking=detection.tracking,
                     memoria=memory_snapshot,
                 )
-                analysis = analyze_event(event.to_analysis_request())
-                if analysis.decision.requires_human_review and not event.imagen:
-                    event = replace(event, imagen=_save_frame(settings.image_dir, annotated_frame))
-                event_queue.put((event, analysis, now))
+                _enqueue_event(event_queue, event, now)
 
             cv2.imshow("SentinelAI - AgentePercepcion", annotated_frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
-    event_queue.put(None)
+    _stop_event_worker(event_queue)
     worker.join(timeout=10)
     stop_telegram_callbacks.set()
     if telegram_callback_worker:
@@ -185,9 +191,10 @@ def _event_worker(
     telegram: TelegramSupervisorClient,
     n8n: N8nClient,
     store: SupabaseEventStore,
+    human_review_store: SupabaseHumanReviewStore,
     memory: EventMemory,
     memory_lock: threading.Lock,
-    event_queue: queue.Queue[tuple[DetectionEvent, object, float] | None],
+    event_queue: queue.Queue[tuple[DetectionEvent, float] | None],
 ) -> None:
     while True:
         item = event_queue.get()
@@ -195,20 +202,82 @@ def _event_worker(
             event_queue.task_done()
             break
 
-        event, analysis, detected_monotonic = item
+        event, detected_monotonic = item
         try:
+            event = _with_historical_knn_samples(event, store)
+            analysis = analyze_event(event.to_analysis_request())
             event = _upload_evidence(settings, evidence_store, event)
             event = event.with_analysis(analysis)
             _send_to_telegram(settings, telegram, event)
             n8n_result = _send_to_n8n(n8n, event)
-            store.save(event, n8n_result.response or event.analisis)
+            detection_event_row = store.save(event, n8n_result.response or event.analisis)
+            _record_pending_human_review(human_review_store, event, detection_event_row)
             with memory_lock:
                 memory.remember(detected_monotonic, analysis.result.risk_level)
-            print(event.to_payload())
+            _print_event_summary(event)
         except Exception as exc:
             print(f"No se pudo procesar evento en segundo plano: {exc}")
         finally:
             event_queue.task_done()
+
+
+def _enqueue_event(
+    event_queue: queue.Queue[tuple[DetectionEvent, float] | None],
+    event: DetectionEvent,
+    detected_monotonic: float,
+) -> None:
+    try:
+        event_queue.put_nowait((event, detected_monotonic))
+    except queue.Full:
+        print(
+            "Cola de eventos llena: se descarto una evidencia para mantener la camara fluida. "
+            "Sube SENTINEL_EVENT_QUEUE_MAXSIZE o revisa n8n/Supabase si pasa seguido."
+        )
+
+
+def _stop_event_worker(event_queue: queue.Queue[tuple[DetectionEvent, float] | None]) -> None:
+    while True:
+        try:
+            event_queue.put_nowait(None)
+            return
+        except queue.Full:
+            try:
+                event_queue.get_nowait()
+                event_queue.task_done()
+            except queue.Empty:
+                continue
+
+
+def _send_review_snapshot_async(
+    telegram: TelegramSupervisorClient,
+    review_id: str,
+    image_path: str,
+) -> None:
+    def send() -> None:
+        result = telegram.send_review_snapshot(review_id, image_path)
+        if result.sent:
+            print(f"Telegram recibio captura adicional para revision: {review_id}")
+        else:
+            print(f"No se pudo enviar captura adicional: {result.error}")
+
+    threading.Thread(target=send, daemon=True).start()
+
+
+def _record_human_review_decision_async(
+    human_review_store: SupabaseHumanReviewStore,
+    decision: dict,
+) -> None:
+    def save() -> None:
+        try:
+            human_review_store.record_decision(decision)
+            print(
+                "Revision humana guardada: "
+                f"{decision.get('review_id')} -> {decision.get('estado_revision')}"
+            )
+        except Exception as exc:
+            print(f"No se pudo guardar decision humana: {exc}")
+
+    threading.Thread(target=save, daemon=True).start()
 
 
 def _cooldown_for_detection(settings, label: str) -> float:
@@ -266,6 +335,42 @@ def _send_to_n8n(n8n: N8nClient, event: DetectionEvent):
 
     print(f"n8n respondio ({result.status_code}): {result.response}")
     return result
+
+
+def _with_historical_knn_samples(
+    event: DetectionEvent,
+    store: SupabaseEventStore,
+) -> DetectionEvent:
+    memory_snapshot = dict(event.memoria or {})
+    memory_snapshot["knn_samples"] = _historical_knn_samples(store)
+    return replace(event, memoria=memory_snapshot)
+
+
+def _print_event_summary(event: DetectionEvent) -> None:
+    analysis = event.analisis or {}
+    result = analysis.get("resultado", {})
+    decision = analysis.get("decision", {})
+    print(
+        "Evento procesado: "
+        f"{event.camara} {event.objeto} conf={event.confianza:.3f} "
+        f"riesgo={result.get('nivel_riesgo', event.riesgo)} "
+        f"score={result.get('score_riesgo', '-')} "
+        f"revision={decision.get('estado_revision_humana', '-')}"
+    )
+
+
+def _record_pending_human_review(
+    human_review_store: SupabaseHumanReviewStore,
+    event: DetectionEvent,
+    detection_event_row: dict | None,
+) -> None:
+    try:
+        row = human_review_store.record_pending(event, detection_event_row)
+    except Exception as exc:
+        print(f"No se pudo registrar revision humana pendiente: {exc}")
+        return
+    if row:
+        print(f"Revision humana pendiente guardada: {row.get('review_id')}")
 
 
 def _upload_evidence(

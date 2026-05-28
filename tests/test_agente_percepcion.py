@@ -10,6 +10,7 @@ from agente_percepcion.events import (
     DetectionEvent,
     N8nClient,
     N8nResult,
+    SupabaseHumanReviewStore,
     _storage_path_for_event,
     risk_for_label,
 )
@@ -542,6 +543,87 @@ def test_detection_event_can_emit_precomputed_analysis_payload() -> None:
     assert row["review_id"] == payload["persistencia"]["review_id"]
 
 
+def test_human_review_store_records_pending_review() -> None:
+    inserted_rows = []
+
+    class Response:
+        data = [{"id": "hr_1", "review_id": "review_123"}]
+
+    class FakeTable:
+        def insert(self, row):
+            inserted_rows.append(row)
+            return self
+
+        def execute(self):
+            return Response()
+
+    class FakeClient:
+        def table(self, table):
+            assert table == "human_reviews"
+            return FakeTable()
+
+    store = SupabaseHumanReviewStore.__new__(SupabaseHumanReviewStore)
+    store._client = FakeClient()
+    store._table = "human_reviews"
+
+    event = DetectionEvent.from_detection(
+        Detection(label="arma", confidence=0.8, box=(10, 20, 80, 120)),
+        camera_name="PC-01",
+    ).with_analysis(
+        analyze_event(
+            DetectionEvent.from_detection(
+                Detection(label="arma", confidence=0.8, box=(10, 20, 80, 120)),
+                camera_name="PC-01",
+            ).to_analysis_request()
+        )
+    )
+
+    row = store.record_pending(event, {"id": "event_1"})
+
+    assert row == {"id": "hr_1", "review_id": "review_123"}
+    assert inserted_rows[0]["detection_event_id"] == "event_1"
+    assert inserted_rows[0]["estado_revision"] == "PENDIENTE"
+    assert inserted_rows[0]["review_id"]
+
+
+def test_human_review_store_records_supervisor_decision() -> None:
+    inserted_rows = []
+
+    class Response:
+        data = [{"id": "hr_2"}]
+
+    class FakeTable:
+        def insert(self, row):
+            inserted_rows.append(row)
+            return self
+
+        def execute(self):
+            return Response()
+
+    class FakeClient:
+        def table(self, table):
+            assert table == "human_reviews"
+            return FakeTable()
+
+    store = SupabaseHumanReviewStore.__new__(SupabaseHumanReviewStore)
+    store._client = FakeClient()
+    store._table = "human_reviews"
+
+    store.record_decision(
+        {
+            "review_id": "rev_123",
+            "estado_revision": "CONFIRMADA",
+            "human_label": "real_threat",
+            "accion_final": "ACTIVAR_PROTOCOLO",
+            "raw_callback": "sentinel:confirm:rev_123",
+        }
+    )
+
+    assert inserted_rows[0]["review_id"] == "rev_123"
+    assert inserted_rows[0]["estado_revision"] == "CONFIRMADA"
+    assert inserted_rows[0]["human_label"] == "real_threat"
+
+
 def test_storage_path_for_event_is_stable_and_grouped() -> None:
     event = DetectionEvent(
         objeto="violence",
@@ -603,6 +685,10 @@ def test_telegram_callback_sends_visible_followup_and_queues_review(monkeypatch)
     assert any(call[0].endswith("/answerCallbackQuery") for call in calls)
     assert any(call[0].endswith("/sendMessage") for call in calls)
     assert client.consume_review_snapshot_requests() == ["rev_123"]
+    decisions = client.consume_review_decisions()
+    assert decisions[0]["review_id"] == "rev_123"
+    assert decisions[0]["estado_revision"] == "REQUIERE_MAS_REVISION"
+    assert decisions[0]["human_label"] == "needs_more_review"
 
 
 def test_event_gate_uses_label_and_camera_cooldown() -> None:

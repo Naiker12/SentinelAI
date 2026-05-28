@@ -142,7 +142,9 @@ SENTINEL_DANGEROUS_CONFIDENCE=0.35
 SENTINEL_INFERENCE_CONFIDENCE=0.20
 SENTINEL_DEBUG_DETECTIONS=true
 SENTINEL_DEBUG_CONFIDENCE=0.05
+SENTINEL_DEBUG_PRINT_INTERVAL_SECONDS=1.0
 SENTINEL_SHOW_FILTERED_DETECTIONS=true
+SENTINEL_EVENT_QUEUE_MAXSIZE=20
 ```
 
 `SENTINEL_INFERENCE_CONFIDENCE` es el umbral que se pasa a YOLO/Ultralytics.
@@ -150,6 +152,8 @@ SENTINEL_SHOW_FILTERED_DETECTIONS=true
 SentinelAI. Esta separacion evita descartar armas borrosas antes de analizarlas.
 Con `SENTINEL_SHOW_FILTERED_DETECTIONS=true`, las detecciones que YOLO ve pero
 SentinelAI filtra se dibujan en gris con el motivo, sin enviarse a Telegram/n8n.
+El intervalo de debug evita saturar la consola, y la cola de eventos permite que
+Telegram, n8n o Supabase fallen sin congelar la ventana de la camara.
 
 ## Ejecutar API local
 

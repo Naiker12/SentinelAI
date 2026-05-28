@@ -50,6 +50,7 @@ class Settings:
     inference_confidence: float
     debug_detections: bool
     debug_confidence: float
+    debug_print_interval_seconds: float
     show_filtered_detections: bool
     debug_filtered_classes: set[str]
     yolo_tracking: bool
@@ -57,12 +58,14 @@ class Settings:
     classes: set[str]
     event_cooldown_seconds: float
     dangerous_event_cooldown_seconds: float
+    event_queue_maxsize: int
     danger_hold_seconds: float
     scene_zone: str
     scene_lighting: str
     supabase_url: str | None
     supabase_service_role_key: str | None
     supabase_detection_events_table: str
+    supabase_human_reviews_table: str
     supabase_storage_bucket: str
     upload_evidence: bool
     n8n_webhook_url: str | None
@@ -96,6 +99,9 @@ def get_settings() -> Settings:
         inference_confidence=float(os.getenv("SENTINEL_INFERENCE_CONFIDENCE", "0.20")),
         debug_detections=_as_bool(os.getenv("SENTINEL_DEBUG_DETECTIONS"), default=False),
         debug_confidence=float(os.getenv("SENTINEL_DEBUG_CONFIDENCE", "0.15")),
+        debug_print_interval_seconds=float(
+            os.getenv("SENTINEL_DEBUG_PRINT_INTERVAL_SECONDS", "1.0")
+        ),
         show_filtered_detections=_as_bool(
             os.getenv("SENTINEL_SHOW_FILTERED_DETECTIONS"),
             default=False,
@@ -113,6 +119,7 @@ def get_settings() -> Settings:
         dangerous_event_cooldown_seconds=float(
             os.getenv("SENTINEL_DANGEROUS_EVENT_COOLDOWN_SECONDS", "120")
         ),
+        event_queue_maxsize=int(os.getenv("SENTINEL_EVENT_QUEUE_MAXSIZE", "20")),
         danger_hold_seconds=float(os.getenv("SENTINEL_DANGER_HOLD_SECONDS", "2")),
         scene_zone=os.getenv("SENTINEL_SCENE_ZONE", "sin_zona"),
         scene_lighting=os.getenv("SENTINEL_SCENE_LIGHTING", "desconocida"),
@@ -121,6 +128,7 @@ def get_settings() -> Settings:
         supabase_detection_events_table=os.getenv(
             "SUPABASE_DETECTION_EVENTS_TABLE", "detection_events"
         ),
+        supabase_human_reviews_table=os.getenv("SUPABASE_HUMAN_REVIEWS_TABLE", "human_reviews"),
         supabase_storage_bucket=os.getenv("SUPABASE_STORAGE_BUCKET", "imagen").strip()
         or "imagen",
         upload_evidence=_as_bool(os.getenv("SENTINEL_UPLOAD_EVIDENCE"), default=True),

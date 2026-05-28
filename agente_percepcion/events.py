@@ -141,8 +141,14 @@ class SupabaseEventStore:
         self._client = create_client(supabase_url, service_role_key)
         self._table = table
 
-    def save(self, event: DetectionEvent, analysis_response: dict | list | str | None = None) -> None:
-        self._client.table(self._table).insert(event.to_supabase_row(analysis_response)).execute()
+    def save(self, event: DetectionEvent, analysis_response: dict | list | str | None = None) -> dict | None:
+        response = (
+            self._client.table(self._table)
+            .insert(event.to_supabase_row(analysis_response))
+            .select("id, review_id")
+            .execute()
+        )
+        return _first_response_row(response)
 
     def latest(self, limit: int = 50) -> list[dict]:
         response = (
@@ -153,6 +159,66 @@ class SupabaseEventStore:
             .execute()
         )
         return list(response.data or [])
+
+
+class SupabaseHumanReviewStore:
+    def __init__(self, supabase_url: str | None, service_role_key: str | None, table: str) -> None:
+        if not supabase_url or not service_role_key:
+            raise RuntimeError(
+                "Faltan SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en el archivo .env."
+            )
+
+        from supabase import create_client
+
+        self._client = create_client(supabase_url, service_role_key)
+        self._table = table
+
+    def record_pending(
+        self,
+        event: DetectionEvent,
+        detection_event_row: dict | None = None,
+    ) -> dict | None:
+        payload = event.to_payload()
+        decision = payload.get("decision", {}) if isinstance(payload, dict) else {}
+        if not decision.get("requiere_revision_humana"):
+            return None
+
+        persistence = _extract_persistence(payload)
+        row = {
+            "detection_event_id": (detection_event_row or {}).get("id"),
+            "review_id": persistence.get("review_id") or decision.get("review_id"),
+            "tracking_id": _tracking_id_from_payload(payload),
+            "camara_id": persistence.get("camara_id") or payload.get("entrada", {}).get("camara"),
+            "estado_revision": "PENDIENTE",
+            "contexto": {
+                "objeto": persistence.get("objeto") or payload.get("entrada", {}).get("objeto"),
+                "confianza": persistence.get("confianza") or payload.get("entrada", {}).get("confianza"),
+                "nivel_riesgo": persistence.get("nivel_riesgo") or payload.get("resultado", {}).get("nivel_riesgo"),
+                "score_riesgo": persistence.get("score_riesgo") or payload.get("resultado", {}).get("score_riesgo"),
+                "imagen": payload.get("entrada", {}).get("imagen"),
+                "telegram_evidencia_enviada": persistence.get("telegram_evidencia_enviada"),
+            },
+        }
+        response = self._client.table(self._table).insert(row).execute()
+        return _first_response_row(response)
+
+    def record_decision(self, decision: dict) -> dict | None:
+        row = {
+            "review_id": decision.get("review_id"),
+            "tracking_id": decision.get("tracking_id"),
+            "camara_id": decision.get("camara_id"),
+            "estado_revision": decision.get("estado_revision", "DESCONOCIDA"),
+            "human_label": decision.get("human_label"),
+            "accion_final": decision.get("accion_final"),
+            "supervisor_user_id": decision.get("supervisor_user_id"),
+            "supervisor_username": decision.get("supervisor_username"),
+            "alimentar_entrenamiento": bool(decision.get("alimentar_entrenamiento", False)),
+            "raw_callback": decision.get("raw_callback"),
+            "contexto": decision.get("contexto"),
+            "decided_at": decision.get("decided_at"),
+        }
+        response = self._client.table(self._table).insert(row).execute()
+        return _first_response_row(response)
 
 
 class SupabaseEvidenceStore:
@@ -274,6 +340,20 @@ def _extract_persistence(response: dict | list | str | None) -> dict:
     if isinstance(response.get("persistencia"), dict):
         return response["persistencia"]
     return {}
+
+
+def _first_response_row(response) -> dict | None:
+    data = getattr(response, "data", None) or []
+    if isinstance(data, list) and data:
+        return data[0]
+    if isinstance(data, dict):
+        return data
+    return None
+
+
+def _tracking_id_from_payload(payload: dict) -> str | None:
+    tracking = payload.get("tracking") if isinstance(payload.get("tracking"), dict) else {}
+    return tracking.get("track_id") or tracking.get("person_id")
 
 
 def _analysis_to_orchestrator_payload(event: DetectionEvent, response: AnalysisResponse) -> dict:

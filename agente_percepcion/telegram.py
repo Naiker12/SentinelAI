@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Event, Lock
 
@@ -26,7 +27,9 @@ class TelegramSupervisorClient:
         self.chat_id = chat_id
         self.timeout_seconds = timeout_seconds
         self._review_snapshot_requests: list[str] = []
+        self._review_decisions: list[dict] = []
         self._review_snapshot_lock = Lock()
+        self._review_decisions_lock = Lock()
 
     def poll_supervisor_callbacks(self, stop_event: Event, interval_seconds: float = 2) -> None:
         if not self.bot_token:
@@ -86,6 +89,7 @@ class TelegramSupervisorClient:
             action,
             ("DESCONOCIDA", "Respuesta recibida.", "RESPUESTA DEL SUPERVISOR"),
         )
+        self._queue_review_decision(callback, review_id, action, status, callback_data)
         self._answer_callback(callback.get("id"), text)
         if action == "review":
             self._queue_review_snapshot(review_id)
@@ -107,9 +111,43 @@ class TelegramSupervisorClient:
             self._review_snapshot_requests.clear()
         return requests_to_send
 
+    def consume_review_decisions(self) -> list[dict]:
+        with self._review_decisions_lock:
+            decisions = self._review_decisions[:]
+            self._review_decisions.clear()
+        return decisions
+
     def _queue_review_snapshot(self, review_id: str) -> None:
         with self._review_snapshot_lock:
             self._review_snapshot_requests.append(review_id)
+
+    def _queue_review_decision(
+        self,
+        callback: dict,
+        review_id: str,
+        action: str,
+        status: str,
+        callback_data: str,
+    ) -> None:
+        selected = _decision_details_for(action, status)
+        user = callback.get("from") or {}
+        with self._review_decisions_lock:
+            self._review_decisions.append(
+                {
+                    "review_id": review_id,
+                    "tracking_id": None,
+                    "camara_id": None,
+                    "estado_revision": status,
+                    "human_label": selected["human_label"],
+                    "accion_final": selected["accion_final"],
+                    "supervisor_user_id": str(user.get("id")) if user.get("id") is not None else None,
+                    "supervisor_username": user.get("username"),
+                    "alimentar_entrenamiento": selected["alimentar_entrenamiento"],
+                    "raw_callback": callback_data,
+                    "contexto": {"source": "telegram_python_polling", "action": action},
+                    "decided_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
 
     def _answer_callback(self, callback_id: str | None, text: str) -> None:
         if not callback_id:
@@ -336,6 +374,32 @@ def _final_instruction_for(action: str) -> str:
     if action == "review":
         return "Se solicitara una nueva captura para revisar mejor la escena antes de cerrar la decision."
     return "Revisar manualmente."
+
+
+def _decision_details_for(action: str, status: str) -> dict:
+    if action == "confirm":
+        return {
+            "human_label": "real_threat",
+            "accion_final": "ACTIVAR_PROTOCOLO",
+            "alimentar_entrenamiento": True,
+        }
+    if action == "false":
+        return {
+            "human_label": "false_positive",
+            "accion_final": "CERRAR_EVENTO",
+            "alimentar_entrenamiento": True,
+        }
+    if action == "review":
+        return {
+            "human_label": "needs_more_review",
+            "accion_final": "SOLICITAR_MAS_CONTEXTO",
+            "alimentar_entrenamiento": False,
+        }
+    return {
+        "human_label": status.lower(),
+        "accion_final": "REVISAR_MANUALMENTE",
+        "alimentar_entrenamiento": False,
+    }
 
 
 def _format_confidence(value) -> str:

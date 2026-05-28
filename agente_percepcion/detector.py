@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,6 +28,7 @@ class YoloDetector:
         inference_confidence: float = 0.20,
         debug_detections: bool = False,
         debug_confidence: float = 0.15,
+        debug_print_interval_seconds: float = 1.0,
         show_filtered_detections: bool = False,
         debug_filtered_classes: set[str] | None = None,
         use_model_tracking: bool = True,
@@ -47,6 +49,8 @@ class YoloDetector:
         self._allowed_classes = allowed_classes
         self._debug_detections = debug_detections
         self._debug_confidence = debug_confidence
+        self._debug_print_interval_seconds = max(0.0, debug_print_interval_seconds)
+        self._last_debug_print_at = 0.0
         self._show_filtered_detections = show_filtered_detections
         self._debug_filtered_classes = debug_filtered_classes or set()
         self._use_model_tracking = use_model_tracking
@@ -108,7 +112,7 @@ class YoloDetector:
                     )
                 )
 
-        if self._debug_detections and debug_rows:
+        if self._debug_detections and debug_rows and self._can_print_debug():
             print("Detecciones YOLO:", " | ".join(debug_rows))
 
         return detections
@@ -128,6 +132,13 @@ class YoloDetector:
         if not self._show_filtered_detections:
             return False
         return not self._debug_filtered_classes or normalize_label(label) in self._debug_filtered_classes
+
+    def _can_print_debug(self) -> bool:
+        now = time.monotonic()
+        if now - self._last_debug_print_at < self._debug_print_interval_seconds:
+            return False
+        self._last_debug_print_at = now
+        return True
 
 
 def draw_detections(frame: MatLike, detections: list[Detection]) -> MatLike:
