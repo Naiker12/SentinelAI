@@ -66,20 +66,35 @@ class TelegramSupervisorClient:
         action = parts[1]
         review_id = parts[2]
         labels = {
-            "confirm": ("CONFIRMADA", "Amenaza confirmada", "ALERTA ACTIVADA"),
-            "false": ("FALSO_POSITIVO", "Marcado como falso positivo", "EVENTO CERRADO"),
-            "review": ("REQUIERE_MAS_REVISION", "Solicitando nueva captura", "REVISION ADICIONAL"),
+            "confirm": (
+                "CONFIRMADA",
+                "Decision registrada: amenaza confirmada.",
+                "DECISION DEL SUPERVISOR",
+            ),
+            "false": (
+                "FALSO_POSITIVO",
+                "Decision registrada: falso positivo.",
+                "DECISION DEL SUPERVISOR",
+            ),
+            "review": (
+                "REQUIERE_MAS_REVISION",
+                "Decision registrada: se solicitara mas evidencia.",
+                "REVISION ADICIONAL",
+            ),
         }
-        status, text, title = labels.get(action, ("DESCONOCIDA", "Respuesta recibida", "RESPUESTA"))
+        status, text, title = labels.get(
+            action,
+            ("DESCONOCIDA", "Respuesta recibida.", "RESPUESTA DEL SUPERVISOR"),
+        )
         self._answer_callback(callback.get("id"), text)
         if action == "review":
             self._queue_review_snapshot(review_id)
         self._send_plain_message(
             "\n".join(
                 [
-                    f"<b>SentinelAI - {title}</b>",
-                    f"Revision: {_escape_html(review_id)}",
-                    f"Estado: {_escape_html(status)}",
+                    f"<b>SentinelAI | {title}</b>",
+                    f"<b>Revision:</b> {_escape_html(review_id)}",
+                    f"<b>Resultado:</b> {_escape_html(status)}",
                     _final_instruction_for(action),
                 ]
             )
@@ -118,11 +133,20 @@ class TelegramSupervisorClient:
         reply_markup = {
             "inline_keyboard": [
                 [
-                    {"text": "Confirmar amenaza", "callback_data": f"sentinel:confirm:{_review_id(payload)}"},
-                    {"text": "Falso positivo", "callback_data": f"sentinel:false:{_review_id(payload)}"},
+                    {
+                        "text": "Confirmar riesgo",
+                        "callback_data": f"sentinel:confirm:{_review_id(payload)}",
+                    },
+                    {
+                        "text": "Descartar alerta",
+                        "callback_data": f"sentinel:false:{_review_id(payload)}",
+                    },
                 ],
                 [
-                    {"text": "Mas revision", "callback_data": f"sentinel:review:{_review_id(payload)}"},
+                    {
+                        "text": "Solicitar mas evidencia",
+                        "callback_data": f"sentinel:review:{_review_id(payload)}",
+                    },
                 ],
             ]
         }
@@ -225,9 +249,9 @@ class TelegramSupervisorClient:
     def send_review_snapshot(self, review_id: str, image_path: str | Path) -> TelegramSendResult:
         caption = "\n".join(
             [
-                "<b>SentinelAI - Captura adicional</b>",
-                f"Revision: {_escape_html(review_id)}",
-                "Esta imagen corresponde a la solicitud de Mas revision.",
+                "<b>SentinelAI | Evidencia adicional</b>",
+                f"<b>Revision:</b> {_escape_html(review_id)}",
+                "Nueva captura enviada para completar la evaluacion del supervisor.",
             ]
         )
         path = Path(image_path)
@@ -255,18 +279,27 @@ def _build_caption(payload: dict) -> str:
     decision = payload.get("decision", {})
     factors = resultado.get("factores", [])[:5]
     factor_lines = "\n".join(
-        f"- {_escape_html(item.get('code', 'factor'))}: {_escape_html(item.get('detail', ''))}"
+        f"- {_human_factor_code(item.get('code', 'factor'))}: {_escape_html(item.get('detail', ''))}"
         for item in factors
     )
+    review_id = _review_id(payload)
+    confidence = _format_confidence(entrada.get("confianza", 0))
+    score = _format_score(resultado.get("score_riesgo", resultado.get("score", 0)))
+    level = _escape_html(resultado.get("nivel_riesgo", resultado.get("riesgo", "BAJO")))
+    object_name = _escape_html(entrada.get("objeto", "unknown"))
+    action = _escape_html(decision.get("accion_tomada", decision.get("accion", "REGISTRAR_EVENTO")))
     lines = [
-        f"<b>SentinelAI - Revision { _escape_html(resultado.get('nivel_riesgo', 'BAJO')) }</b>",
-        f"Camara: {_escape_html(entrada.get('camara', 'PC-01'))}",
-        f"Evento: {_escape_html(entrada.get('objeto', 'unknown'))} ({_escape_html(entrada.get('confianza', 0))})",
-        f"Score: {_escape_html(resultado.get('score_riesgo', 0))}",
-        f"Accion: {_escape_html(decision.get('accion_tomada', decision.get('accion', 'REGISTRAR_EVENTO')))}",
+        f"<b>SentinelAI | Revision requerida - {level}</b>",
+        f"<b>Revision:</b> {_escape_html(review_id)}",
+        f"<b>Camara:</b> {_escape_html(entrada.get('camara', 'PC-01'))}",
+        f"<b>Deteccion:</b> {object_name}",
+        f"<b>Confianza:</b> {confidence}",
+        f"<b>Score:</b> {score}",
+        f"<b>Accion sugerida:</b> {action}",
     ]
     if factor_lines:
-        lines.append(f"Factores:\n{factor_lines}")
+        lines.append(f"<b>Factores principales:</b>\n{factor_lines}")
+    lines.append("<b>Decision:</b> confirme el riesgo, descartelo o pida mas evidencia.")
     return "\n".join(lines)[:1024]
 
 
@@ -297,12 +330,49 @@ def _json_dumps(value: dict) -> str:
 
 def _final_instruction_for(action: str) -> str:
     if action == "confirm":
-        return "Se debe activar el protocolo definido para amenaza real."
+        return "El evento queda confirmado por supervision humana. Activar el protocolo operativo definido."
     if action == "false":
-        return "Se marca como falso positivo y queda listo para entrenamiento."
+        return "El evento queda descartado como alerta operativa y puede usarse para mejorar el entrenamiento."
     if action == "review":
-        return "La camara enviara una nueva captura para analizar mejor la escena."
+        return "Se solicitara una nueva captura para revisar mejor la escena antes de cerrar la decision."
     return "Revisar manualmente."
+
+
+def _format_confidence(value) -> str:
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError):
+        return _escape_html(value)
+    return f"{confidence:.2%}"
+
+
+def _format_score(value) -> str:
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return _escape_html(value)
+    if score <= 1:
+        return f"{score:.2f}"
+    return f"{score:.0f}/100"
+
+
+def _human_factor_code(value) -> str:
+    labels = {
+        "objeto_peligroso": "Objeto de alto riesgo",
+        "objeto_base": "Objeto detectado",
+        "objeto_observado": "Objeto observado",
+        "alta_confianza": "Confianza alta",
+        "confianza_media": "Confianza aceptable",
+        "baja_confianza": "Confianza baja",
+        "horario_nocturno": "Horario nocturno",
+        "baja_iluminacion": "Baja iluminacion",
+        "historial_alertas": "Historial de alertas",
+        "historial_eventos": "Actividad reciente",
+        "knn_vecinos_riesgo": "Patron similar de riesgo",
+        "knn_vecinos_bajo_riesgo": "Patron similar de bajo riesgo",
+        "payload_incompleto": "Datos incompletos",
+    }
+    return _escape_html(labels.get(str(value), str(value).replace("_", " ").title()))
 
 
 def _callback_polling_hint(exc: requests.RequestException) -> str:

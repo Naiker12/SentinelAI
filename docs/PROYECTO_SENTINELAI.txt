@@ -1,0 +1,815 @@
+SentinelAI - Documento del proyecto, agentes, algoritmos, tecnologias y flujo
+Fecha: 2026-05-28
+
+Objetivo del proyecto
+=====================
+
+SentinelAI es un sistema de monitoreo preventivo con vision artificial. Su objetivo
+es acoplarse a una fuente de video existente, como webcam, camara local o RTSP,
+leer frames de esa senal, detectar situaciones u objetos de riesgo, calcular un
+nivel de riesgo, enviar los eventos importantes a revision humana y mostrar la
+informacion en un panel de control.
+
+El sistema no depende de una sola pieza. Trabaja como una arquitectura multiagente:
+un agente detecta, otro analiza, otro calcula riesgo, otro decide la accion, otro
+guarda memoria, otro lleva la alerta a revision humana y el dashboard muestra el
+estado del sistema.
+
+
+Nota sobre algoritmos y tecnologias
+===================================
+
+En este documento se separan tres cosas:
+
+- Tecnologia o framework: herramienta usada para implementar, por ejemplo OpenCV,
+  Ultralytics, FastAPI, Supabase, n8n o Streamlit.
+- Modelo o arquitectura: estructura que resuelve una tarea, por ejemplo YOLO para
+  deteccion de objetos.
+- Algoritmo o metodo: logica matematica usada por debajo, por ejemplo CNN para
+  extraer caracteristicas visuales, IoU para asociar cajas, reglas deterministicas
+  para puntuar riesgo y KNN para comparar eventos similares.
+
+
+Resumen tecnico por agente
+==========================
+
+- AgentePercepcion:
+  Tecnologia: OpenCV + Ultralytics.
+  Modelo: YOLO entrenado en `best.pt`.
+  Base algoritmica: CNN para vision artificial.
+  Metodo: deteccion de objetos en frames, filtro por confianza, filtro por clase y cooldown.
+  Salida: detecciones con objeto, confianza, caja, imagen opcional y contexto.
+
+- AgenteTracking / MotionTracker:
+  Tecnologia: Python local.
+  Modelo: no usa modelo neuronal propio.
+  Algoritmos/metodos: track_id, IoU, distancia entre centros, velocidad aproximada y deteccion de movimiento erratico.
+  Salida: track_id, velocidad, permanencia y patron de movimiento.
+
+- AgenteAnalisis:
+  Tecnologia: FastAPI + Pydantic + Python.
+  Modelo: no usa modelo visual; recibe datos estructurados.
+  Algoritmos/metodos: validacion de contrato, normalizacion, reglas deterministicas, KNN y distancia euclidiana.
+  Salida: resultado analizado, score, factores, decision y persistencia.
+
+- AgenteRiesgo:
+  Tecnologia: Python.
+  Modelo: no es modelo externo; es motor matematico local.
+  Algoritmos/metodos: `risk_rules_v2_knn_temporal`, reglas por score, KNN con prototipos e historial, clasificacion BAJO/MEDIO/ALTO/CRITICO.
+  Salida: score de 0 a 100, nivel de riesgo y factores explicables.
+
+- AgenteAccion:
+  Tecnologia: Python.
+  Modelo: no usa IA.
+  Algoritmos/metodos: reglas deterministicas por umbral de score.
+  Salida: accion, prioridad, canales, bloqueo de automatizacion y necesidad de revision humana.
+
+- AgenteMemoria:
+  Tecnologia: Python + Supabase/Postgres.
+  Modelo: no usa IA.
+  Algoritmos/metodos: ventana temporal de 24 horas, conteo de eventos, conteo de alertas y recuperacion de historial para KNN.
+  Salida: memoria reciente e historial para apoyar el analisis.
+
+- AgenteInterfazHumana:
+  Tecnologia: Telegram + n8n + Dashboard + Supabase.
+  Modelo: no usa IA para decidir.
+  Algoritmos/metodos: estados de revision humana y reglas de callback del supervisor.
+  Salida: confirmacion, falso positivo, solicitud de mas revision o trazabilidad de la decision.
+
+- n8n:
+  Tecnologia: n8n + JavaScript + Webhooks.
+  Modelo: puede conectar LLM opcional solo para explicacion, no para decision final.
+  Algoritmos/metodos: validacion de contrato, orquestacion y enrutamiento.
+  Salida: respuesta de orquestacion, alerta y datos listos para persistencia.
+
+- Dashboard:
+  Tecnologia: Streamlit + Pandas + Plotly.
+  Modelo: no usa IA.
+  Algoritmos/metodos: normalizacion de datos, agregaciones, filtros temporales y graficas.
+  Salida: panel de control con eventos, riesgo, memoria y revision humana.
+
+
+Agentes del proyecto
+====================
+
+1. AgentePercepcion
+-------------------
+
+Ubicacion principal:
+
+- agente_percepcion/main.py
+- agente_percepcion/detector.py
+- agente_percepcion/camera.py
+- agente_percepcion/events.py
+- agente_percepcion/config.py
+- agente_percepcion/api.py
+
+Para que sirve:
+
+- Se conecta a la camara local, webcam o fuente compatible con OpenCV.
+- Lee frames en tiempo real desde la senal de video acoplada.
+- Ejecuta un modelo de deteccion tipo YOLO para detectar objetos o situaciones.
+- Dibuja las cajas de deteccion en pantalla.
+- Crea eventos JSON cuando detecta algo relevante.
+- Adjunta contexto de escena como zona, iluminacion y cantidad de personas.
+- Envia el evento al AgenteAnalisis.
+- Envia eventos enriquecidos a n8n.
+- Guarda eventos en Supabase.
+- Puede guardar o subir evidencia visual.
+
+Modelo, framework y algoritmo que usa:
+
+- Framework/libreria: Ultralytics.
+- Modelo de deteccion: YOLO entrenado en formato best.pt.
+- Base algoritmica del modelo: redes neuronales convolucionales, CNN, para extraer patrones visuales de los frames.
+- Metodo de deteccion: deteccion de objetos en una sola pasada, one-stage object detection, con cajas delimitadoras, clase y confianza.
+- Por que se usa: permite deteccion en tiempo real, es rapido para webcam/camara local, soporta entrenamiento propio y se integra facil con Python/OpenCV.
+- Puede usar tracking interno del framework Ultralytics con BoT-SORT si SENTINEL_YOLO_TRACKING esta activo.
+- Usa filtros por confianza minima.
+- Usa filtros por clases permitidas en SENTINEL_CLASSES.
+- Usa cooldown por camara, objeto y region para no mandar el mismo evento demasiadas veces.
+- Usa retencion temporal de peligros por unos segundos para estabilizar detecciones fugaces.
+
+Tecnologias:
+
+- Python
+- OpenCV
+- Ultralytics
+- YOLO como modelo/arquitectura de deteccion
+- FastAPI
+- Requests
+- Supabase Python client
+- Variables .env
+
+
+2. AgenteTracking / MotionTracker
+---------------------------------
+
+Ubicacion principal:
+
+- agente_percepcion/tracking.py
+
+Para que sirve:
+
+- Mantiene una continuidad basica entre detecciones de frames diferentes.
+- Agrega track_id a las detecciones.
+- Calcula velocidad aproximada.
+- Calcula permanencia en segundos.
+- Marca movimiento erratico cuando detecta cambios bruscos de direccion.
+- Complementa el tracking que puede venir desde YOLO/BoT-SORT.
+
+Metodo que usa:
+
+- Matching por track_id cuando el detector/framework ya entrega uno.
+- Si no hay track_id, compara detecciones contra tracks existentes.
+- Usa IoU entre bounding boxes.
+- Usa distancia entre centros de las cajas.
+- Elige la coincidencia con mejor puntaje.
+- Elimina tracks antiguos despues de un tiempo sin aparecer.
+
+Tecnologias:
+
+- Python
+- Dataclasses
+- Calculo matematico local con math
+- No usa DeepSORT ni un modelo neuronal independiente de seguimiento.
+
+
+3. AgenteAnalisis
+-----------------
+
+Ubicacion principal:
+
+- agente_analisis/api.py
+- agente_analisis/schemas.py
+- agente_analisis/risk_engine.py
+
+Para que sirve:
+
+- Recibe el evento detectado por AgentePercepcion.
+- Normaliza la entrada.
+- Lee contexto de escena, tracking y memoria.
+- Prepara una respuesta estructurada para n8n, Supabase, Telegram y dashboard.
+- Devuelve resultado, decision y datos de persistencia.
+
+Metodo que usa:
+
+- Valida y normaliza el evento con Pydantic.
+- Convierte la deteccion visual en variables de analisis: objeto, confianza, hora, zona, iluminacion, cantidad_personas, tracking y memoria.
+- Ejecuta el algoritmo oficial `risk_rules_v2_knn_temporal` desde `agente_analisis/risk_engine.py`.
+- Usa reglas deterministicas para sumar o restar riesgo segun objeto, confianza, horario, iluminacion, memoria y tracking.
+- Usa KNN, K-Nearest Neighbors, para comparar el evento actual contra prototipos internos y eventos historicos cuando Supabase entrega muestras.
+- Usa distancia euclidiana para medir que tan parecido es el evento actual a eventos de bajo, medio, alto o critico riesgo.
+- Despues del score, aplica reglas de decision para definir accion, prioridad, canales y si requiere revision humana.
+- No detecta objetos por si solo; interpreta lo que ya detecto el modelo de vision.
+
+Por que se usa este enfoque:
+
+- Las reglas deterministicas hacen que la decision sea explicable y auditable.
+- KNN ayuda a comparar el evento con patrones conocidos sin necesitar todavia un modelo ML grande entrenado con muchos datos propios.
+- Pydantic evita que datos incompletos o mal formados entren al flujo de riesgo.
+- La separacion permite que YOLO/CNN detecte imagen y que AgenteAnalisis trabaje con datos estructurados.
+
+Tecnologias:
+
+- Python
+- FastAPI
+- Pydantic
+- Uvicorn
+- Math para distancia euclidiana
+- Supabase como fuente opcional de historial KNN
+
+
+4. AgenteRiesgo
+---------------
+
+Ubicacion real:
+
+- agente_analisis/risk_engine.py
+
+Relacion con AgenteAnalisis:
+
+- AgenteRiesgo no es una API separada. Es la parte matematica del AgenteAnalisis.
+- AgenteAnalisis prepara los datos y AgenteRiesgo calcula el score.
+- En codigo, ambos viven en el mismo motor `risk_engine.py`.
+
+Para que sirve:
+
+- Calcula el puntaje de riesgo del evento.
+- Clasifica el evento como BAJO, MEDIO, ALTO o CRITICO.
+- Explica los factores que sumaron o restaron puntos.
+
+Algoritmos que usa:
+
+- risk_rules_v2_knn_temporal.
+- Reglas deterministicas por objeto, confianza, horario, iluminacion, memoria y tracking.
+- KNN local, K-Nearest Neighbors, para comparar el evento actual contra prototipos e historial real cuando existe.
+- Distancia euclidiana para buscar vecinos similares.
+- El KNN no detecta imagenes. Se usa despues de la deteccion visual, con variables numericas del evento, para apoyar el score de riesgo.
+
+Reglas principales:
+
+- Objetos peligrosos como arma, arma_blanca, fusil y violencia empiezan con score alto.
+- Confianza alta suma puntos.
+- Confianza baja resta puntos.
+- Horario nocturno suma riesgo.
+- Baja iluminacion suma riesgo.
+- Historial de alertas o muchos eventos recientes suma riesgo.
+- Movimiento, velocidad y permanencia pueden influir por medio del tracking/KNN.
+
+Clasificacion actual:
+
+- 0 a 29: BAJO
+- 30 a 69: MEDIO
+- 70 a 89: ALTO
+- 90 a 100: CRITICO
+
+Tecnologias:
+
+- Python
+- Pydantic
+- Math
+- Reglas propias
+- KNN implementado localmente
+
+
+5. AgenteAccion
+---------------
+
+Ubicacion real:
+
+- agente_analisis/risk_engine.py, funcion decide_action
+
+Para que sirve:
+
+- Decide que se debe hacer despues de calcular el riesgo.
+- Define si se registra el evento, si se ignora por baja confianza o si requiere revision humana.
+- Define prioridad, canales de notificacion y bloqueo de automatizacion.
+
+Metodo que usa:
+
+- Reglas por score:
+  - Score >= 90: solicitar validacion urgente.
+  - Score >= 70: solicitar validacion humana.
+  - Score >= 30: solicitar revision humana.
+  - Score < 30: registrar evento o ignorar por baja confianza.
+
+Tecnologias:
+
+- Python
+- Reglas deterministicas
+
+
+6. AgenteMemoria
+----------------
+
+Ubicacion principal:
+
+- agente_percepcion/memory.py
+- agente_percepcion/events.py
+- Supabase tabla detection_events
+
+Para que sirve:
+
+- Mantiene conteos recientes de eventos en memoria RAM.
+- Guarda eventos historicos en Supabase.
+- Entrega al AgenteRiesgo datos como eventos_previos_24h y alertas_previas_24h.
+- Alimenta muestras historicas para el KNN cuando Supabase tiene datos.
+
+Metodo que usa:
+
+- Ventana temporal de 24 horas para memoria local.
+- Conteo de eventos recientes.
+- Conteo de alertas recientes.
+- Consulta de eventos historicos desde Supabase para formar muestras KNN.
+
+Tecnologias:
+
+- Python
+- Supabase
+- Postgres
+- Prisma para migraciones
+
+
+7. AgenteInterfazHumana
+-----------------------
+
+Ubicacion principal:
+
+- agente_percepcion/telegram.py
+- n8n/
+- dashboard/sentinel_dashboard.py
+- tabla human_reviews en Supabase
+
+Para que sirve:
+
+- Lleva eventos de riesgo a un supervisor humano.
+- Envia evidencia por Telegram cuando esta configurado.
+- Permite acciones humanas como confirmar amenaza, marcar falso positivo o pedir mas revision.
+- Mantiene trazabilidad de revision humana.
+- Refleja la cola de revision en el dashboard.
+
+Metodo que usa:
+
+- Reglas de decision generadas por AgenteAccion.
+- Botones de Telegram para callback de supervisor.
+- Estados de revision: PENDIENTE, CONFIRMADA, FALSO_POSITIVO, REQUIERE_MAS_REVISION, NO_REQUERIDA.
+
+Tecnologias:
+
+- Telegram Bot API
+- Requests
+- n8n
+- Supabase
+- Streamlit
+
+
+8. n8n como orquestador
+-----------------------
+
+Ubicacion principal:
+
+- n8n/AgenteAnalisis.workflow.json
+- n8n/code/
+
+Para que sirve:
+
+- Recibe el webhook desde AgentePercepcion.
+- Valida que el evento ya venga analizado por Python.
+- Orquesta alertas, respuestas, persistencia y flujos externos.
+- Puede usar Groq/LLM solo para explicacion contextual, no para decidir el riesgo final.
+
+Metodo que usa:
+
+- Validacion del contrato del evento.
+- Si faltan resultado y decision, rechaza el evento crudo.
+- Si el evento esta completo, respeta el analisis oficial de Python.
+
+Tecnologias:
+
+- n8n
+- JavaScript en nodos Code
+- Webhooks HTTP
+- Telegram opcional
+- Groq/LLM opcional para explicacion
+
+
+9. Dashboard / Panel de control
+-------------------------------
+
+Ubicacion principal:
+
+- dashboard/sentinel_dashboard.py
+- dashboard/data.py
+
+Para que sirve:
+
+- Muestra el estado del sistema.
+- Lee eventos reales desde Supabase.
+- Permite filtrar por horas, camaras y nivel de riesgo.
+- Muestra resumen general, riesgo, interfaz humana, memoria y eventos en vivo.
+- No inventa eventos si no hay credenciales o no hay conexion con Supabase.
+
+Tecnologias:
+
+- Streamlit
+- Pandas
+- Plotly
+- Supabase Python client
+- CSS embebido en Streamlit
+
+
+Modelo de vision artificial
+===========================
+
+Modelo activo esperado:
+
+- yolo_percepcion/entrenamiento_seguridad/weights/best.pt
+
+Clases esperadas del modelo:
+
+- arma
+- arma_blanca
+- fusil
+- multitud
+- no_violencia
+- persona
+- persona_sospechosa
+- undefined
+- violencia
+
+Clases que normalmente se habilitan en .env:
+
+- arma
+- arma_blanca
+- fusil
+- multitud
+- no_violencia
+- persona
+- persona_sospechosa
+- violencia
+
+Nota:
+
+- YOLO aqui se entiende como arquitectura/modelo de deteccion y Ultralytics como framework/libreria para entrenar y ejecutar ese modelo.
+- La base de aprendizaje visual del modelo es CNN. Por eso puede aprender patrones de imagen como formas, bordes, texturas y composiciones que ayudan a distinguir armas, personas, violencia u otras clases.
+- undefined existe en el entrenamiento, pero no se considera peligrosa por defecto.
+- persona y no_violencia se pueden dibujar en pantalla, pero por si solas no deben disparar alertas criticas.
+- El sistema mantiene alias antiguos como gun, knife, person, violence y nonviolence para compatibilidad.
+
+
+Flujo completo de datos
+=======================
+
+Flujo principal:
+
+Fuente de video / Webcam / Camara IP / RTSP
+  -> AgentePercepcion
+  -> OpenCV lee un frame de la senal
+  -> Modelo YOLO/CNN detecta objetos y genera bounding boxes
+  -> Se normalizan las clases detectadas
+  -> Se filtra por confianza y clases habilitadas
+  -> MotionTracker agrega tracking, velocidad, permanencia y movimiento
+  -> Se aplica cooldown para no repetir eventos iguales
+  -> Se crea DetectionEvent
+  -> Se agrega contexto de escena
+  -> Se agrega memoria temporal e historial para KNN desde Supabase
+  -> AgenteAnalisis recibe el evento
+  -> AgenteRiesgo calcula score y nivel
+  -> AgenteAccion decide si registra, notifica o pide revision humana
+  -> Se adjunta evidencia visual si corresponde
+  -> Se envia a Telegram si requiere revision humana y esta configurado
+  -> Se envia a n8n para orquestacion
+  -> Se guarda en Supabase
+  -> Dashboard lee Supabase y muestra el evento
+
+
+Que datos viajan en el evento
+=============================
+
+Entrada:
+
+- objeto
+- confianza
+- camara
+- hora
+- box
+- imagen
+
+Contexto:
+
+- zona
+- iluminacion
+- cantidad_personas
+
+Tracking:
+
+- track_id
+- person_id cuando aplica
+- velocidad
+- permanencia_segundos
+- movimiento_erratico
+- patron_movimiento
+
+Memoria:
+
+- eventos_previos_24h
+- alertas_previas_24h
+- knn_samples cuando hay historial
+
+Resultado:
+
+- nivel_riesgo
+- score
+- score_riesgo
+- factores
+- comportamiento_posible
+- algoritmo
+
+Decision:
+
+- accion_tomada
+- prioridad
+- notificar
+- canales
+- guardar_en_supabase
+- requiere_revision_humana
+- estado_revision_humana
+- acciones_humanas_permitidas
+- automatizacion_bloqueada
+
+Persistencia:
+
+- datos listos para guardar en detection_events
+- review_id para trazabilidad de revision humana
+
+
+Contencion y filtros: que no llega a revision
+=============================================
+
+No todo lo que ve la camara se convierte en alerta. El sistema tiene varias capas
+de contencion para evitar ruido, falsos positivos y repeticion excesiva.
+
+1. No llega si la clase no esta habilitada
+-----------------------------------------
+
+Si el modelo de vision detecta una clase que no esta dentro de SENTINEL_CLASSES, el detector la
+filtra. Esa deteccion no se convierte en evento.
+
+
+2. No llega si la confianza es muy baja
+--------------------------------------
+
+Cada deteccion debe superar SENTINEL_CONFIDENCE. Para clases peligrosas tambien
+se respeta SENTINEL_DANGEROUS_CONFIDENCE. Si no supera el umbral, no se genera
+evento.
+
+
+3. No llega repetido si esta en cooldown
+---------------------------------------
+
+El sistema guarda la ultima emision por camara, objeto y region aproximada de la
+imagen. Si se detecta lo mismo otra vez dentro del cooldown, no se vuelve a enviar.
+
+Variables relacionadas:
+
+- SENTINEL_EVENT_COOLDOWN_SECONDS
+- SENTINEL_DANGEROUS_EVENT_COOLDOWN_SECONDS
+
+
+4. No llega a Telegram si no requiere revision humana
+----------------------------------------------------
+
+Los eventos BAJOS normalmente solo se registran. Los eventos MEDIOS, ALTOS o
+CRITICOS pueden pedir revision humana segun el score y la accion calculada.
+
+
+5. No llega a n8n como decision final si viene crudo
+---------------------------------------------------
+
+n8n espera un evento ya analizado por Python. Si recibe un payload sin resultado
+y decision, el flujo lo rechaza con RECHAZAR_EVENTO_SIN_ANALISIS. Esto evita que
+haya dos fuentes de verdad calculando riesgo.
+
+
+6. No se inventan datos en el dashboard
+--------------------------------------
+
+Si Supabase no esta configurado o no responde, el dashboard muestra estado sin
+datos reales. No crea eventos falsos para llenar graficas.
+
+
+Flujo de revision humana
+========================
+
+1. El modelo de vision YOLO/CNN detecta un objeto o evento relevante.
+2. AgenteRiesgo calcula el score.
+3. AgenteAccion decide si requiere revision humana.
+4. Si requiere revision, se genera review_id.
+5. Si Telegram esta configurado, se envia mensaje o foto al supervisor.
+6. El supervisor puede elegir:
+   - CONFIRMAR_AMENAZA
+   - FALSO_POSITIVO
+   - REQUIERE_MAS_REVISION
+7. La decision humana queda como trazabilidad en el flujo y puede alimentar
+   entrenamiento futuro.
+8. El dashboard muestra pendientes, bloqueadas, revision humana y eventos altos
+   o criticos.
+
+
+Panel de control
+================
+
+El panel se ejecuta con:
+
+streamlit run dashboard/sentinel_dashboard.py
+
+Secciones actuales:
+
+1. Resumen General
+------------------
+
+- Total de eventos.
+- Eventos criticos.
+- Eventos altos.
+- Score promedio.
+- Camaras activas.
+- Actividad por hora.
+- Distribucion de riesgo.
+- Objetos detectados.
+- Score promedio por camara.
+- Ultimas alertas altas o criticas.
+
+
+2. AgenteRiesgo
+---------------
+
+- Eventos analizados.
+- Eventos que requieren revision humana.
+- Movimiento erratico.
+- Velocidad promedio.
+- Riesgo por objeto.
+- Acciones tomadas.
+- Eventos con mayor score.
+
+
+3. Interfaz Humana
+------------------
+
+- Revisiones pendientes.
+- Eventos con automatizacion bloqueada.
+- Cola de revision humana.
+- Estado de revisiones.
+- Eventos para supervisor.
+
+
+4. AgenteMemoria
+----------------
+
+- Patrones por hora.
+- Score promedio temporal.
+- Reincidencia por camara.
+- Historial de eventos altos y criticos.
+- Eventos previos en las ultimas 24 horas.
+
+
+5. Eventos en Vivo
+------------------
+
+- Ultimos eventos detectados.
+- Camara.
+- Objeto.
+- Confianza.
+- Score.
+- Nivel.
+- Track ID.
+- Velocidad.
+- Permanencia.
+- Accion tomada.
+
+
+Base de datos
+=============
+
+Tecnologia:
+
+- Supabase
+- Postgres
+- Prisma
+
+Tablas principales:
+
+1. camaras
+----------
+
+- codigo
+- nombre
+- ubicacion
+- activa
+- created_at
+
+
+2. detection_events
+-------------------
+
+- objeto
+- confianza
+- riesgo
+- detected_at
+- camara_id
+- box
+- imagen_url
+- score_riesgo
+- nivel_riesgo
+- accion_tomada
+- alertas_previas_24h
+- hora_dia
+- contexto
+
+
+3. human_reviews
+----------------
+
+- detection_event_id
+- tracking_id
+- camara_id
+- estado_revision
+- human_label
+- accion_final
+- supervisor_user_id
+- supervisor_username
+- alimentar_entrenamiento
+- raw_callback
+- contexto
+- decided_at
+
+
+Tecnologias generales del proyecto
+==================================
+
+Backend y agentes:
+
+- Python
+- FastAPI
+- Uvicorn
+- Pydantic
+- Requests
+- python-dotenv
+
+Vision artificial:
+
+- OpenCV
+- Ultralytics como framework/libreria
+- YOLO como arquitectura/modelo de deteccion
+- CNN como base neuronal de extraccion visual
+- BoT-SORT por configuracion de Ultralytics
+- Modelo best.pt entrenado para seguridad
+
+Datos:
+
+- Supabase
+- Postgres
+- Prisma
+- Pandas
+
+Panel:
+
+- Streamlit
+- Plotly
+- CSS
+
+Orquestacion:
+
+- n8n
+- Webhooks
+- JavaScript en nodos Code
+- Telegram Bot API
+- Groq/LLM opcional para explicacion
+
+Pruebas:
+
+- pytest
+
+
+Resumen ejecutivo
+=================
+
+SentinelAI funciona asi:
+
+1. La camara o fuente externa entrega una senal de video.
+2. SentinelAI se acopla a esa senal y lee frames con OpenCV.
+3. El modelo YOLO/CNN detecta objetos o situaciones.
+4. El sistema filtra lo que no cumple confianza, clase o cooldown.
+5. El evento valido pasa a analisis.
+6. AgenteRiesgo calcula score con reglas deterministicas y KNN.
+7. AgenteAccion decide si solo registra o si pide revision humana.
+8. Eventos importantes van a Telegram/n8n/Supabase.
+9. El dashboard lee Supabase y muestra el estado del sistema.
+
+La regla principal de arquitectura es:
+
+Python calcula y decide el riesgo.
+n8n orquesta.
+Telegram permite revision humana.
+Supabase guarda la memoria.
+Streamlit muestra el panel de control.
