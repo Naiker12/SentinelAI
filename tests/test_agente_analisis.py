@@ -193,9 +193,40 @@ def test_knn_uses_real_historical_samples_when_available() -> None:
                     "tracking": {"velocidad": 40, "permanencia_segundos": 0},
                     "memoria": {},
                     "score": 96,
-                }
+                },
+                {
+                    "objeto": "arma",
+                    "confianza": 0.62,
+                    "hora": "2026-05-27T20:18:36+00:00",
+                    "contexto": {"cantidad_personas": 1},
+                    "tracking": {"velocidad": 38, "permanencia_segundos": 0},
+                    "memoria": {},
+                    "score": 94,
+                },
+                {
+                    "objeto": "violencia",
+                    "confianza": 0.7,
+                    "hora": "2026-05-27T20:20:36+00:00",
+                    "contexto": {"cantidad_personas": 2},
+                    "tracking": {"velocidad": 36, "permanencia_segundos": 0},
+                    "memoria": {},
+                    "score": 90,
+                },
             ]
         ),
     )
 
     assert knn_risk_score(request) >= 90
+
+
+def test_knn_returns_none_without_enough_real_history() -> None:
+    request = AnalysisRequest(
+        evento=PerceptionEvent(
+            objeto="arma",
+            confianza=0.6,
+            hora=datetime(2026, 5, 27, 20, 30, tzinfo=timezone.utc),
+            camara="PC-01",
+        )
+    )
+
+    assert knn_risk_score(request) is None

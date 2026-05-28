@@ -44,6 +44,7 @@ def run() -> None:
         settings.confidence,
         settings.classes,
         dangerous_confidence=settings.dangerous_confidence,
+        inference_confidence=settings.inference_confidence,
         debug_detections=settings.debug_detections,
         debug_confidence=settings.debug_confidence,
         use_model_tracking=settings.yolo_tracking,
@@ -96,6 +97,7 @@ def run() -> None:
         height=settings.camera_height,
         fps=settings.camera_fps,
         fourcc=settings.camera_fourcc,
+        drop_stale_frames=settings.camera_drop_stale_frames,
     ) as camera:
         while True:
             frame = camera.read()

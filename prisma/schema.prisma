@@ -51,6 +51,7 @@ model DetectionEvent {
   action            String?   @map("accion_tomada")
   previousAlerts24h Int       @default(0) @map("alertas_previas_24h")
   dayHour           Int?      @map("hora_dia")
+  reviewId          String?   @map("review_id")
   context           Json?     @map("contexto")
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
@@ -61,12 +62,14 @@ model DetectionEvent {
   @@index([detectedAt(sort: Desc)], map: "idx_detection_events_detected_at")
   @@index([risk, detectedAt(sort: Desc)], map: "idx_detection_events_risk_detected_at")
   @@index([object, detectedAt(sort: Desc)], map: "idx_detection_events_object_detected_at")
+  @@index([reviewId], map: "idx_detection_events_review_id")
   @@map("detection_events")
 }
 
 model HumanReview {
   id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   detectionEventId    String?           @map("detection_event_id") @db.Uuid
+  reviewId            String?           @map("review_id")
   trackingId          String?           @map("tracking_id")
   cameraId            String?           @map("camara_id")
   status              HumanReviewStatus @default(PENDIENTE) @map("estado_revision")
@@ -83,6 +86,7 @@ model HumanReview {
   detectionEvent DetectionEvent? @relation(fields: [detectionEventId], references: [id])
 
   @@index([trackingId, createdAt(sort: Desc)], map: "idx_human_reviews_tracking_created_at")
+  @@index([reviewId, createdAt(sort: Desc)], map: "idx_human_reviews_review_id_created_at")
   @@index([status, createdAt(sort: Desc)], map: "idx_human_reviews_status_created_at")
   @@map("human_reviews")
 }

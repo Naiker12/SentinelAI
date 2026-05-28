@@ -68,9 +68,11 @@ para orquestacion. El contrato debe incluir `entrada`, `tracking`, `memoria`,
 Groq puede enriquecer `resultado.resumen_ia`, pero no debe reemplazar el score ni
 la decision final del motor de reglas.
 
-El KNN local compara el evento actual contra prototipos internos de bajo, medio,
-alto y critico usando distancia euclidiana. Solo ajusta el score como factor
-explicable; no reemplaza la deteccion YOLO ni la validacion humana.
+El KNN local compara el evento actual contra historial real recibido desde
+Supabase usando distancia euclidiana. Si no hay suficientes eventos historicos,
+KNN no se aplica y el score queda solo en manos de reglas deterministicas. Solo
+ajusta el score como factor explicable; no reemplaza la deteccion YOLO ni la
+validacion humana.
 
 Salida: resultado normalizado, decision final, factores explicables y datos de
 persistencia para Supabase.

@@ -55,7 +55,7 @@ Resumen tecnico por agente
 - AgenteRiesgo:
   Tecnologia: Python.
   Modelo: no es modelo externo; es motor matematico local.
-  Algoritmos/metodos: `risk_rules_v2_knn_temporal`, reglas por score, KNN con prototipos e historial, clasificacion BAJO/MEDIO/ALTO/CRITICO.
+  Algoritmos/metodos: `risk_rules_v2_knn_temporal`, reglas por score, KNN solo con historial real, clasificacion BAJO/MEDIO/ALTO/CRITICO.
   Salida: score de 0 a 100, nivel de riesgo y factores explicables.
 
 - AgenteAccion:
@@ -198,15 +198,16 @@ Metodo que usa:
 - Convierte la deteccion visual en variables de analisis: objeto, confianza, hora, zona, iluminacion, cantidad_personas, tracking y memoria.
 - Ejecuta el algoritmo oficial `risk_rules_v2_knn_temporal` desde `agente_analisis/risk_engine.py`.
 - Usa reglas deterministicas para sumar o restar riesgo segun objeto, confianza, horario, iluminacion, memoria y tracking.
-- Usa KNN, K-Nearest Neighbors, para comparar el evento actual contra prototipos internos y eventos historicos cuando Supabase entrega muestras.
+- Usa KNN, K-Nearest Neighbors, para comparar el evento actual contra eventos historicos reales cuando Supabase entrega muestras suficientes.
 - Usa distancia euclidiana para medir que tan parecido es el evento actual a eventos de bajo, medio, alto o critico riesgo.
+- Si no hay historial real suficiente, KNN no se aplica y el score queda en manos de las reglas deterministicas.
 - Despues del score, aplica reglas de decision para definir accion, prioridad, canales y si requiere revision humana.
 - No detecta objetos por si solo; interpreta lo que ya detecto el modelo de vision.
 
 Por que se usa este enfoque:
 
 - Las reglas deterministicas hacen que la decision sea explicable y auditable.
-- KNN ayuda a comparar el evento con patrones conocidos sin necesitar todavia un modelo ML grande entrenado con muchos datos propios.
+- KNN ayuda a comparar el evento con patrones reales ya observados sin necesitar todavia un modelo ML grande entrenado aparte.
 - Pydantic evita que datos incompletos o mal formados entren al flujo de riesgo.
 - La separacion permite que YOLO/CNN detecte imagen y que AgenteAnalisis trabaje con datos estructurados.
 
@@ -243,9 +244,10 @@ Algoritmos que usa:
 
 - risk_rules_v2_knn_temporal.
 - Reglas deterministicas por objeto, confianza, horario, iluminacion, memoria y tracking.
-- KNN local, K-Nearest Neighbors, para comparar el evento actual contra prototipos e historial real cuando existe.
+- KNN local, K-Nearest Neighbors, para comparar el evento actual contra historial real cuando existe.
 - Distancia euclidiana para buscar vecinos similares.
 - El KNN no detecta imagenes. Se usa despues de la deteccion visual, con variables numericas del evento, para apoyar el score de riesgo.
+- No usa datos de ejemplo ni prototipos manuales en produccion. Con poco historial, KNN devuelve vacio y no modifica el score.
 
 Reglas principales:
 

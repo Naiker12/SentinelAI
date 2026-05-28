@@ -28,16 +28,7 @@ OBJECT_BASE_SCORES = {
 }
 DANGEROUS_OBJECTS = {"arma", "arma_blanca", "fusil", "violencia"}
 KNN_K = 3
-KNN_PROTOTYPES = [
-    ([1.0, 0.95, 0.0, 0.0, 0.0, 0.0, 0.1, 0.2, 0.0, 0.0], 90),
-    ([0.9, 0.85, 0.0, 0.0, 0.0, 0.0, 0.1, 0.1, 0.0, 0.0], 75),
-    ([0.8, 0.65, 1.0, 1.0, 0.4, 0.4, 0.2, 0.5, 0.0, 1.0], 95),
-    ([0.8, 0.55, 0.0, 0.0, 0.2, 0.2, 0.1, 0.7, 0.0, 1.0], 78),
-    ([0.5, 0.85, 0.0, 0.0, 0.0, 0.0, 0.7, 0.2, 0.0, 0.0], 45),
-    ([0.4, 0.80, 0.0, 0.0, 0.0, 0.0, 0.2, 0.2, 0.0, 0.0], 38),
-    ([0.1, 0.90, 0.0, 0.0, 0.0, 0.0, 0.1, 0.1, 0.0, 0.0], 10),
-    ([0.0, 0.90, 0.0, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0], 2),
-]
+KNN_MIN_REAL_SAMPLES = 3
 
 
 def analyze_event(request: AnalysisRequest) -> AnalysisResponse:
@@ -111,18 +102,21 @@ def calculate_risk_score(request: AnalysisRequest) -> tuple[int, list[RiskFactor
         add(8, "historial_eventos", "Actividad reciente alta.")
 
     knn_score = knn_risk_score(request)
-    if knn_score >= score + 8:
-        points = min(12, max(4, round((knn_score - score) / 4)))
-        add(points, "knn_vecinos_riesgo", f"KNN sugiere riesgo cercano a {knn_score}.")
-    elif knn_score <= score - 20 and objeto not in DANGEROUS_OBJECTS:
-        add(-5, "knn_vecinos_bajo_riesgo", f"KNN compara con eventos de bajo riesgo: {knn_score}.")
+    if knn_score is not None:
+        if knn_score >= score + 8:
+            points = min(12, max(4, round((knn_score - score) / 4)))
+            add(points, "knn_vecinos_riesgo", f"KNN historico sugiere riesgo cercano a {knn_score}.")
+        elif knn_score <= score - 20 and objeto not in DANGEROUS_OBJECTS:
+            add(-5, "knn_vecinos_bajo_riesgo", f"KNN historico compara con eventos de bajo riesgo: {knn_score}.")
 
     return max(0, min(score, 100)), factors
 
 
-def knn_risk_score(request: AnalysisRequest, k: int = KNN_K) -> int:
+def knn_risk_score(request: AnalysisRequest, k: int = KNN_K) -> int | None:
     features = _knn_features(request)
-    prototypes = [*KNN_PROTOTYPES, *_historical_knn_prototypes(request)]
+    prototypes = _historical_knn_prototypes(request)
+    if len(prototypes) < max(1, min(k, KNN_MIN_REAL_SAMPLES)):
+        return None
     distances = [
         (_euclidean_distance(features, prototype_features), score)
         for prototype_features, score in prototypes

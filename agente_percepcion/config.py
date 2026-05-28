@@ -43,9 +43,11 @@ class Settings:
     camera_height: int | None
     camera_fps: int | None
     camera_fourcc: str | None
+    camera_drop_stale_frames: int
     model_path: str
     confidence: float
     dangerous_confidence: float
+    inference_confidence: float
     debug_detections: bool
     debug_confidence: float
     yolo_tracking: bool
@@ -82,12 +84,14 @@ def get_settings() -> Settings:
         camera_height=_as_optional_int(os.getenv("SENTINEL_CAMERA_HEIGHT")),
         camera_fps=_as_optional_int(os.getenv("SENTINEL_CAMERA_FPS")),
         camera_fourcc=os.getenv("SENTINEL_CAMERA_FOURCC", "MJPG").strip() or None,
+        camera_drop_stale_frames=int(os.getenv("SENTINEL_CAMERA_DROP_STALE_FRAMES", "2")),
         model_path=os.getenv(
             "SENTINEL_MODEL",
             "yolo_percepcion/entrenamiento_seguridad/weights/best.pt",
         ),
-        confidence=float(os.getenv("SENTINEL_CONFIDENCE", "0.5")),
-        dangerous_confidence=float(os.getenv("SENTINEL_DANGEROUS_CONFIDENCE", "0.45")),
+        confidence=float(os.getenv("SENTINEL_CONFIDENCE", "0.25")),
+        dangerous_confidence=float(os.getenv("SENTINEL_DANGEROUS_CONFIDENCE", "0.35")),
+        inference_confidence=float(os.getenv("SENTINEL_INFERENCE_CONFIDENCE", "0.20")),
         debug_detections=_as_bool(os.getenv("SENTINEL_DEBUG_DETECTIONS"), default=False),
         debug_confidence=float(os.getenv("SENTINEL_DEBUG_CONFIDENCE", "0.15")),
         yolo_tracking=_as_bool(os.getenv("SENTINEL_YOLO_TRACKING"), default=True),

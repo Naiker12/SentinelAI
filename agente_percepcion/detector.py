@@ -22,7 +22,8 @@ class YoloDetector:
         model_path: str,
         confidence: float,
         allowed_classes: set[str],
-        dangerous_confidence: float = 0.45,
+        dangerous_confidence: float = 0.35,
+        inference_confidence: float = 0.20,
         debug_detections: bool = False,
         debug_confidence: float = 0.15,
         use_model_tracking: bool = True,
@@ -39,6 +40,7 @@ class YoloDetector:
         self._model = YOLO(model_path)
         self._confidence = confidence
         self._dangerous_confidence = dangerous_confidence
+        self._inference_confidence = inference_confidence
         self._allowed_classes = allowed_classes
         self._debug_detections = debug_detections
         self._debug_confidence = debug_confidence
@@ -53,11 +55,7 @@ class YoloDetector:
         )
 
     def detect(self, frame: MatLike) -> list[Detection]:
-        predict_confidence = (
-            min(self._confidence, self._debug_confidence)
-            if self._debug_detections
-            else self._confidence
-        )
+        predict_confidence = self._predict_confidence()
         if self._use_model_tracking and hasattr(self._model, "track"):
             results = self._model.track(
                 frame,
@@ -113,6 +111,12 @@ class YoloDetector:
         if normalize_label(label) in {"arma", "arma_blanca", "fusil", "violencia"}:
             return max(self._confidence, self._dangerous_confidence)
         return self._confidence
+
+    def _predict_confidence(self) -> float:
+        floor = min(self._confidence, self._inference_confidence)
+        if self._debug_detections:
+            return min(floor, self._debug_confidence)
+        return floor
 
 
 def draw_detections(frame: MatLike, detections: list[Detection]) -> MatLike:

@@ -29,14 +29,17 @@ function escapeHtml(value) {
 }
 
 const text = [
-  `<b>SentinelAI - Revision ${escapeHtml(risk)}</b>`,
-  `Accion: ${escapeHtml(decision.accion_tomada ?? decision.accion ?? "REGISTRAR_EVENTO")}`,
-  `Revision humana: ${escapeHtml(reviewStatus)}`,
+  `<b>SentinelAI | Revision requerida - ${escapeHtml(risk)}</b>`,
+  `Revision: ${escapeHtml(reviewKey)}`,
   `Camara: ${escapeHtml(event.camara ?? "PC-01")}`,
-  `Objeto: ${escapeHtml(event.objeto ?? "unknown")} (${escapeHtml(event.confianza ?? 0)})`,
+  `Deteccion: ${escapeHtml(event.objeto ?? "unknown")}`,
+  `Confianza: ${escapeHtml(event.confianza ?? 0)}`,
   `Score: ${escapeHtml(score)}`,
+  `Accion sugerida: ${escapeHtml(decision.accion_tomada ?? decision.accion ?? "REGISTRAR_EVENTO")}`,
+  `Estado: ${escapeHtml(reviewStatus)}`,
   data.resultado?.resumen_ia ? `IA: ${escapeHtml(data.resultado.resumen_ia)}` : null,
-  factors ? `Factores:\n${factors}` : null,
+  factors ? `Factores principales:\n${factors}` : null,
+  reviewRequired ? "Decision: confirme el riesgo, descartelo o pida mas evidencia." : null,
 ].filter(Boolean).join("\n");
 
 return [
@@ -49,11 +52,11 @@ return [
         ? {
             inline_keyboard: [
               [
-                { text: "Confirmar amenaza", callback_data: `sentinel:confirm:${reviewKey}` },
-                { text: "Falso positivo", callback_data: `sentinel:false:${reviewKey}` },
+                { text: "Confirmar riesgo", callback_data: `sentinel:confirm:${reviewKey}` },
+                { text: "Descartar alerta", callback_data: `sentinel:false:${reviewKey}` },
               ],
               [
-                { text: "Mas revision", callback_data: `sentinel:review:${reviewKey}` },
+                { text: "Solicitar mas evidencia", callback_data: `sentinel:review:${reviewKey}` },
               ],
             ],
           }

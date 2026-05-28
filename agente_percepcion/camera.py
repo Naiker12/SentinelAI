@@ -16,12 +16,14 @@ class Camera:
     height: int | None = None
     fps: int | None = None
     fourcc: str | None = "MJPG"
+    drop_stale_frames: int = 0
     read_retries: int = 15
 
     def __post_init__(self) -> None:
         self._capture = self._open_capture()
 
     def read(self) -> MatLike:
+        self._drop_stale_frames()
         frame = self._read_with_retries(self._capture)
         if frame is None:
             raise RuntimeError(
@@ -72,6 +74,11 @@ class Camera:
             time.sleep(0.08)
         return None
 
+    def _drop_stale_frames(self) -> None:
+        for _ in range(max(0, self.drop_stale_frames)):
+            if not self._capture.grab():
+                break
+
 
 def _backend_candidates(preferred: str) -> list[tuple[str, int]]:
     backends = {
@@ -102,6 +109,7 @@ def _configure_capture(
     fps: int | None,
     fourcc: str | None,
 ) -> None:
+    capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if fourcc:
         normalized = fourcc.strip().upper()
         if len(normalized) == 4:

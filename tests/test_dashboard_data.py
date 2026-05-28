@@ -119,3 +119,22 @@ def test_normalize_supabase_events_reads_human_interface_context() -> None:
     assert df.iloc[0]["estado_revision_humana"] == "PENDIENTE"
     assert df.iloc[0]["automatizacion_bloqueada"] == True
     assert df.iloc[0]["review_id"] == "PC-01_knife_20260526"
+
+
+def test_normalize_supabase_events_prefers_review_id_column() -> None:
+    rows = [
+        {
+            "objeto": "arma",
+            "confianza": 0.9,
+            "riesgo": "ALTO",
+            "detected_at": "2026-05-26T12:00:00+00:00",
+            "camara_id": "PC-01",
+            "box": [1, 2, 3, 4],
+            "review_id": "review_column_123",
+            "contexto": {"review_id": "review_context_456"},
+        }
+    ]
+
+    df = normalize_supabase_events(rows)
+
+    assert df.iloc[0]["review_id"] == "review_column_123"

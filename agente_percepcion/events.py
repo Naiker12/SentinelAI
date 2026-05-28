@@ -109,6 +109,7 @@ class DetectionEvent:
         score = enriched.get("score_riesgo")
         action = enriched.get("accion_tomada")
         previous_alerts = enriched.get("alertas_previas_24h")
+        review_id = enriched.get("review_id")
 
         return {
             "objeto": self.objeto,
@@ -123,6 +124,7 @@ class DetectionEvent:
             "accion_tomada": action,
             "alertas_previas_24h": previous_alerts or 0,
             "hora_dia": _hour_from_isoformat(detected_at),
+            "review_id": review_id,
             "contexto": context or None,
         }
 

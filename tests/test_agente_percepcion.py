@@ -6,7 +6,13 @@ import types
 
 from agente_percepcion.config import _classes
 from agente_percepcion.detector import Detection, draw_detections, normalize_label
-from agente_percepcion.events import DetectionEvent, N8nClient, _storage_path_for_event, risk_for_label
+from agente_percepcion.events import (
+    DetectionEvent,
+    N8nClient,
+    N8nResult,
+    _storage_path_for_event,
+    risk_for_label,
+)
 from agente_percepcion.telegram import TelegramSupervisorClient
 from agente_percepcion.memory import should_emit_detection
 from agente_analisis.risk_engine import analyze_event
@@ -62,6 +68,7 @@ def test_detection_event_maps_n8n_persistence_to_supabase_row() -> None:
     assert row["score_riesgo"] == 0.95
     assert row["nivel_riesgo"] == "CRITICO"
     assert row["accion_tomada"] == "ALERTA_CRITICA"
+    assert row["review_id"] is None
     assert row["hora_dia"] == 23
     assert row["contexto"]["tracking"]["person_id"] == "person_0001"
     assert row["contexto"]["resumen_ia"] == "Objeto peligroso asociado a una persona."
@@ -217,8 +224,46 @@ def test_detector_uses_ultralytics_tracking_when_available(monkeypatch) -> None:
 
     detections = detector.detect(np.zeros((10, 10, 3), dtype=np.uint8))
 
-    assert calls == [(0.5, True, "botsort.yaml")]
+    assert calls == [(0.2, True, "botsort.yaml")]
     assert detections[0].tracking == {"track_id": "arma_0007"}
+
+
+def test_detector_uses_low_inference_confidence_but_keeps_final_filter(monkeypatch) -> None:
+    from agente_percepcion import detector as detector_module
+    from agente_percepcion.detector import YoloDetector
+
+    calls = []
+
+    class FakeBox:
+        cls = [0]
+        conf = [0.32]
+        xyxy = [[10, 20, 30, 40]]
+
+    class FakeModel:
+        names = {0: "arma"}
+
+        def predict(self, frame, conf, verbose):
+            calls.append(conf)
+            return [type("Result", (), {"names": self.names, "boxes": [FakeBox()]})()]
+
+    monkeypatch.setattr(detector_module, "_configure_ultralytics_runtime", lambda: None)
+    monkeypatch.setitem(
+        sys.modules,
+        "ultralytics",
+        types.SimpleNamespace(YOLO=lambda model_path: FakeModel()),
+    )
+
+    detector = YoloDetector(
+        "yolov8n.pt",
+        confidence=0.25,
+        dangerous_confidence=0.35,
+        inference_confidence=0.2,
+        allowed_classes={"arma"},
+        use_model_tracking=False,
+    )
+
+    assert detector.detect(np.zeros((10, 10, 3), dtype=np.uint8)) == []
+    assert calls == [0.2]
 
 
 def test_n8n_without_webhook_does_not_send() -> None:
@@ -271,6 +316,64 @@ def test_n8n_can_allow_test_webhook_for_manual_workflow_debug() -> None:
 
     assert client.webhook_url.endswith("/webhook-test/sentinel-analysis")
     assert client.allow_test_webhook is True
+
+
+def test_detect_once_api_sends_precomputed_analysis(monkeypatch) -> None:
+    from agente_percepcion import api as api_module
+
+    sent_payloads = []
+    saved_payloads = []
+
+    class FakeDetector:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def detect(self, frame):
+            return [
+                Detection(
+                    label="arma",
+                    confidence=0.8,
+                    box=(10, 20, 80, 120),
+                    tracking={"track_id": "arma_0001"},
+                )
+            ]
+
+    class FakeCamera:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return None
+
+        def read(self):
+            return np.zeros((120, 160, 3), dtype=np.uint8)
+
+    class FakeN8n:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def send(self, event):
+            sent_payloads.append(event.to_payload())
+            return N8nResult(sent=True, status_code=200, response=event.to_payload())
+
+    class FakeStore:
+        def save(self, event, response):
+            saved_payloads.append(event.to_payload())
+
+    monkeypatch.setattr(api_module, "YoloDetector", FakeDetector)
+    monkeypatch.setattr(api_module, "Camera", FakeCamera)
+    monkeypatch.setattr(api_module, "N8nClient", FakeN8n)
+    monkeypatch.setattr(api_module, "get_store", lambda: FakeStore())
+
+    result = api_module.detect_once()
+
+    assert result["detections"][0]["resultado"]["nivel_riesgo"] in {"ALTO", "CRITICO"}
+    assert sent_payloads[0]["resultado"]["score_riesgo"] > 0
+    assert sent_payloads[0]["decision"]["requiere_revision_humana"] is True
+    assert saved_payloads[0]["persistencia"]["tracking"]["track_id"] == "arma_0001"
 
 
 def test_detection_event_includes_analysis_context() -> None:
@@ -353,6 +456,7 @@ def test_detection_event_can_emit_precomputed_analysis_payload() -> None:
 
     analyzed = event.with_analysis(analyze_event(event.to_analysis_request()))
     payload = analyzed.to_payload()
+    row = analyzed.to_supabase_row(payload)
 
     assert payload["entrada"]["objeto"] == "arma"
     assert payload["tracking"]["track_id"] == "gun_0001"
@@ -361,6 +465,7 @@ def test_detection_event_can_emit_precomputed_analysis_payload() -> None:
     assert payload["decision"]["requiere_revision_humana"] is True
     assert payload["decision"]["automatizacion_bloqueada"] is True
     assert payload["persistencia"]["tracking"]["person_id"] == "person_0001"
+    assert row["review_id"] == payload["persistencia"]["review_id"]
 
 
 def test_storage_path_for_event_is_stable_and_grouped() -> None:

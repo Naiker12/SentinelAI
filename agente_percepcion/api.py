@@ -4,6 +4,7 @@ from functools import lru_cache
 
 from fastapi import FastAPI, Query
 
+from agente_analisis.risk_engine import analyze_event
 from agente_percepcion.camera import Camera
 from agente_percepcion.config import get_settings
 from agente_percepcion.detector import YoloDetector
@@ -44,6 +45,7 @@ def detect_once() -> dict:
         settings.confidence,
         settings.classes,
         dangerous_confidence=settings.dangerous_confidence,
+        inference_confidence=settings.inference_confidence,
         debug_detections=settings.debug_detections,
         debug_confidence=settings.debug_confidence,
         use_model_tracking=settings.yolo_tracking,
@@ -61,13 +63,25 @@ def detect_once() -> dict:
         height=settings.camera_height,
         fps=settings.camera_fps,
         fourcc=settings.camera_fourcc,
+        drop_stale_frames=settings.camera_drop_stale_frames,
     ) as camera:
         frame = camera.read()
         detections = detector.detect(frame)
 
     saved_events = []
     for detection in detections:
-        event = DetectionEvent.from_detection(detection, camera_name=settings.camera_name)
+        event = DetectionEvent.from_detection(
+            detection,
+            camera_name=settings.camera_name,
+            contexto={
+                "zona": settings.scene_zone,
+                "iluminacion": settings.scene_lighting,
+                "cantidad_personas": sum(1 for item in detections if item.label == "persona"),
+            },
+            tracking=detection.tracking,
+            memoria={"eventos_previos_24h": 0, "alertas_previas_24h": 0},
+        )
+        event = event.with_analysis(analyze_event(event.to_analysis_request()))
         n8n_result = n8n.send(event)
         get_store().save(event, n8n_result.response)
         saved_events.append(

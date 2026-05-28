@@ -129,6 +129,10 @@ def normalize_supabase_events(rows: list[dict]) -> pd.DataFrame:
         )
     if "review_id" not in df.columns:
         df["review_id"] = context_series.map(lambda value: _safe_dict(value).get("review_id"))
+    else:
+        df["review_id"] = df["review_id"].fillna(
+            context_series.map(lambda value: _safe_dict(value).get("review_id"))
+        )
 
     df["hora"] = df.get("hora_dia")
     df["hora"] = pd.to_numeric(df["hora"], errors="coerce")

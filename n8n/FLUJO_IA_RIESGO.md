@@ -195,11 +195,11 @@ Rutas recomendadas:
 {
   "inline_keyboard": [
     [
-      {"text": "Confirmar amenaza", "callback_data": "sentinel:confirm:REVIEW_ID"},
-      {"text": "Falso positivo", "callback_data": "sentinel:false:REVIEW_ID"}
+      {"text": "Confirmar riesgo", "callback_data": "sentinel:confirm:REVIEW_ID"},
+      {"text": "Descartar alerta", "callback_data": "sentinel:false:REVIEW_ID"}
     ],
     [
-      {"text": "Mas revision", "callback_data": "sentinel:review:REVIEW_ID"}
+      {"text": "Solicitar mas evidencia", "callback_data": "sentinel:review:REVIEW_ID"}
     ]
   ]
 }

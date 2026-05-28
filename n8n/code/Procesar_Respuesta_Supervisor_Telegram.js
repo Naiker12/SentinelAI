@@ -9,16 +9,16 @@ const actionMap = {
     estado_revision_humana: "CONFIRMADA",
     accion_final: "ACTIVAR_PROTOCOLO",
     alimentar_entrenamiento: true,
-    titulo: "ALERTA ACTIVADA",
-    detalle: "Amenaza confirmada por supervisor. Activar protocolo operativo.",
+    titulo: "DECISION DEL SUPERVISOR",
+    detalle: "El evento queda confirmado por supervision humana. Activar el protocolo operativo definido.",
   },
   false: {
     human_label: "false_positive",
     estado_revision_humana: "FALSO_POSITIVO",
     accion_final: "CERRAR_EVENTO",
     alimentar_entrenamiento: true,
-    titulo: "EVENTO CERRADO",
-    detalle: "Marcado como falso positivo. Guardar feedback para reentrenamiento.",
+    titulo: "DECISION DEL SUPERVISOR",
+    detalle: "El evento queda descartado como alerta operativa y puede usarse para mejorar el entrenamiento.",
   },
   review: {
     human_label: "needs_more_review",
@@ -26,7 +26,7 @@ const actionMap = {
     accion_final: "SOLICITAR_MAS_CONTEXTO",
     alimentar_entrenamiento: false,
     titulo: "REVISION ADICIONAL",
-    detalle: "Solicitar nueva captura o enviar el evento a un nodo IA para explicar la escena.",
+    detalle: "Se solicitara una nueva captura para revisar mejor la escena antes de cerrar la decision.",
   },
 };
 
@@ -62,9 +62,9 @@ return [
       },
       telegram_followup: {
         text: [
-          `<b>SentinelAI - ${selected.titulo}</b>`,
-          `Revision: ${reviewId || "sin_evento"}`,
-          `Estado: ${selected.estado_revision_humana}`,
+          `<b>SentinelAI | ${selected.titulo}</b>`,
+          `<b>Revision:</b> ${reviewId || "sin_evento"}`,
+          `<b>Resultado:</b> ${selected.estado_revision_humana}`,
           selected.detalle,
         ].join("\n"),
         parse_mode: "HTML",

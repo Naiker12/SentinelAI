@@ -124,9 +124,27 @@ SENTINEL_CAMERA_WIDTH=640
 SENTINEL_CAMERA_HEIGHT=480
 SENTINEL_CAMERA_FPS=30
 SENTINEL_CAMERA_FOURCC=MJPG
+SENTINEL_CAMERA_DROP_STALE_FRAMES=2
 ```
 
 Si sigue corrupta, cambia `SENTINEL_CAMERA_INDEX=1` o usa `SENTINEL_CAMERA_FOURCC=YUY2`.
+
+Si el modelo detecta bien en imagenes quietas, pero falla cuando hay movimiento,
+revisa desenfoque y latencia. Para video en vivo conviene que Ultralytics reciba
+detecciones de baja confianza y que SentinelAI filtre despues:
+
+```env
+SENTINEL_CAMERA_WIDTH=640
+SENTINEL_CAMERA_HEIGHT=480
+SENTINEL_CAMERA_DROP_STALE_FRAMES=2
+SENTINEL_CONFIDENCE=0.25
+SENTINEL_DANGEROUS_CONFIDENCE=0.35
+SENTINEL_INFERENCE_CONFIDENCE=0.20
+```
+
+`SENTINEL_INFERENCE_CONFIDENCE` es el umbral que se pasa a YOLO/Ultralytics.
+`SENTINEL_CONFIDENCE` y `SENTINEL_DANGEROUS_CONFIDENCE` son el filtro final de
+SentinelAI. Esta separacion evita descartar armas borrosas antes de analizarlas.
 
 ## Ejecutar API local
 
@@ -161,6 +179,9 @@ La variable `SENTINEL_CLASSES` controla que clases generan eventos. Con el model
 ```env
 SENTINEL_MODEL=yolo_percepcion/entrenamiento_seguridad/weights/best.pt
 SENTINEL_CLASSES=arma,arma_blanca,fusil,multitud,no_violencia,persona,persona_sospechosa,violencia
+SENTINEL_CONFIDENCE=0.25
+SENTINEL_DANGEROUS_CONFIDENCE=0.35
+SENTINEL_INFERENCE_CONFIDENCE=0.20
 SENTINEL_DANGEROUS_EVENT_COOLDOWN_SECONDS=120
 SENTINEL_DANGER_HOLD_SECONDS=2
 ```
