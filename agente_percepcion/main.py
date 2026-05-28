@@ -47,6 +47,7 @@ def run() -> None:
         inference_confidence=settings.inference_confidence,
         debug_detections=settings.debug_detections,
         debug_confidence=settings.debug_confidence,
+        show_filtered_detections=settings.show_filtered_detections,
         use_model_tracking=settings.yolo_tracking,
         tracker=settings.yolo_tracker,
     )
@@ -104,13 +105,15 @@ def run() -> None:
             now = time.monotonic()
             detections = detector.detect(frame)
             detections = motion_tracker.update(detections, now)
-            detections, last_danger = _stabilize_danger_detections(
-                detections,
+            accepted_detections = _accepted_detections(detections)
+            filtered_detections = _filtered_detections(detections)
+            accepted_detections, last_danger = _stabilize_danger_detections(
+                accepted_detections,
                 last_danger,
                 now,
                 settings.danger_hold_seconds,
             )
-            annotated_frame = draw_detections(frame.copy(), detections)
+            annotated_frame = draw_detections(frame.copy(), [*accepted_detections, *filtered_detections])
             for review_id in telegram.consume_review_snapshot_requests():
                 image_path = _save_frame(settings.image_dir, annotated_frame)
                 result = telegram.send_review_snapshot(review_id, image_path)
@@ -119,7 +122,7 @@ def run() -> None:
                 else:
                     print(f"No se pudo enviar captura adicional: {result.error}")
 
-            for detection in detections:
+            for detection in accepted_detections:
                 if not _is_alertable_detection(detection.label):
                     continue
                 cooldown = _cooldown_for_detection(settings, detection.label)
@@ -152,7 +155,7 @@ def run() -> None:
                         "zona": settings.scene_zone,
                         "iluminacion": settings.scene_lighting,
                         "cantidad_personas": sum(
-                            1 for item in detections if item.label == "persona"
+                            1 for item in accepted_detections if item.label == "persona"
                         ),
                     },
                     tracking=detection.tracking,
@@ -214,7 +217,15 @@ def _cooldown_for_detection(settings, label: str) -> float:
 
 
 def _is_alertable_detection(label: str) -> bool:
-    return risk_for_label(label) == "alto"
+    return risk_for_label(label) in {"alto", "medio"}
+
+
+def _accepted_detections(detections: list[Detection]) -> list[Detection]:
+    return [detection for detection in detections if not detection.filtered_reason]
+
+
+def _filtered_detections(detections: list[Detection]) -> list[Detection]:
+    return [detection for detection in detections if detection.filtered_reason]
 
 
 def _stabilize_danger_detections(

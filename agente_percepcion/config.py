@@ -50,6 +50,7 @@ class Settings:
     inference_confidence: float
     debug_detections: bool
     debug_confidence: float
+    show_filtered_detections: bool
     yolo_tracking: bool
     yolo_tracker: str
     classes: set[str]
@@ -94,6 +95,10 @@ def get_settings() -> Settings:
         inference_confidence=float(os.getenv("SENTINEL_INFERENCE_CONFIDENCE", "0.20")),
         debug_detections=_as_bool(os.getenv("SENTINEL_DEBUG_DETECTIONS"), default=False),
         debug_confidence=float(os.getenv("SENTINEL_DEBUG_CONFIDENCE", "0.15")),
+        show_filtered_detections=_as_bool(
+            os.getenv("SENTINEL_SHOW_FILTERED_DETECTIONS"),
+            default=False,
+        ),
         yolo_tracking=_as_bool(os.getenv("SENTINEL_YOLO_TRACKING"), default=True),
         yolo_tracker=os.getenv("SENTINEL_YOLO_TRACKER", "botsort.yaml").strip() or "botsort.yaml",
         classes=_classes(os.getenv("SENTINEL_CLASSES", "persona")),

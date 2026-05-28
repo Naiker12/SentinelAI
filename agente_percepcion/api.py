@@ -48,6 +48,7 @@ def detect_once() -> dict:
         inference_confidence=settings.inference_confidence,
         debug_detections=settings.debug_detections,
         debug_confidence=settings.debug_confidence,
+        show_filtered_detections=settings.show_filtered_detections,
         use_model_tracking=settings.yolo_tracking,
         tracker=settings.yolo_tracker,
     )
@@ -66,7 +67,11 @@ def detect_once() -> dict:
         drop_stale_frames=settings.camera_drop_stale_frames,
     ) as camera:
         frame = camera.read()
-        detections = detector.detect(frame)
+        detections = [
+            detection
+            for detection in detector.detect(frame)
+            if not detection.filtered_reason
+        ]
 
     saved_events = []
     for detection in detections:

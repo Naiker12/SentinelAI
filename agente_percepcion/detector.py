@@ -14,6 +14,7 @@ class Detection:
     confidence: float
     box: tuple[int, int, int, int]
     tracking: dict | None = None
+    filtered_reason: str | None = None
 
 
 class YoloDetector:
@@ -26,6 +27,7 @@ class YoloDetector:
         inference_confidence: float = 0.20,
         debug_detections: bool = False,
         debug_confidence: float = 0.15,
+        show_filtered_detections: bool = False,
         use_model_tracking: bool = True,
         tracker: str = "botsort.yaml",
     ) -> None:
@@ -44,6 +46,7 @@ class YoloDetector:
         self._allowed_classes = allowed_classes
         self._debug_detections = debug_detections
         self._debug_confidence = debug_confidence
+        self._show_filtered_detections = show_filtered_detections
         self._use_model_tracking = use_model_tracking
         self._tracker = tracker
         print(f"Modelo YOLO: {model_path}")
@@ -85,20 +88,21 @@ class YoloDetector:
                     state = "FILTRADA" if filtered_reasons else "OK"
                     reason = ",".join(filtered_reasons) if filtered_reasons else "-"
                     debug_rows.append(f"{label}:{confidence:.3f}:{state}:{reason}")
-                if filtered_reasons:
-                    continue
 
                 xyxy = box.xyxy[0]
                 if hasattr(xyxy, "tolist"):
                     xyxy = xyxy.tolist()
                 x1, y1, x2, y2 = (int(value) for value in xyxy)
                 track_id = _track_id_from_box(box, label)
+                if filtered_reasons and not self._show_filtered_detections:
+                    continue
                 detections.append(
                     Detection(
                         label=label,
                         confidence=confidence,
                         box=(x1, y1, x2, y2),
                         tracking={"track_id": track_id} if track_id else None,
+                        filtered_reason=",".join(filtered_reasons) if filtered_reasons else None,
                     )
                 )
 
@@ -122,7 +126,7 @@ class YoloDetector:
 def draw_detections(frame: MatLike, detections: list[Detection]) -> MatLike:
     for detection in detections:
         x1, y1, x2, y2 = detection.box
-        color = _color_for_label(detection.label)
+        color = (140, 140, 140) if detection.filtered_reason else _color_for_label(detection.label)
         text = _detection_text(detection)
 
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
@@ -143,6 +147,8 @@ def _detection_text(detection: Detection) -> str:
         text += f" v{float(speed):.0f}"
     if motion == "movimiento_erratico":
         text += " ERR"
+    if detection.filtered_reason:
+        text += f" FILTRADA:{detection.filtered_reason}"
     return text
 
 
@@ -174,12 +180,17 @@ def _draw_label(frame: MatLike, text: str, x: int, y: int, color: tuple[int, int
 def _color_for_label(label: str) -> tuple[int, int, int]:
     normalized = normalize_label(label)
     high_risk = {"arma", "arma_blanca", "fusil", "violencia", "knife", "gun", "scissors", "violence"}
-    medium_risk = {"multitud", "persona_sospechosa", "person", "persona", "car", "truck", "backpack", "cell_phone"}
+    medium_risk = {"multitud", "persona_sospechosa"}
+    observed = {"person", "persona", "car", "truck", "backpack", "cell_phone"}
 
     if normalized in high_risk:
         return (35, 35, 230)
     if normalized in medium_risk:
         return (20, 180, 230)
+    if normalized in observed:
+        return (20, 180, 90)
+    if normalized == "undefined":
+        return (180, 180, 180)
     return (20, 180, 90)
 
 

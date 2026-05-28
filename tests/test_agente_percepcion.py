@@ -104,10 +104,11 @@ def test_detection_labels_normalize_weapon_aliases() -> None:
 
 
 def test_allowed_classes_normalize_to_detector_labels() -> None:
-    assert _classes("persona,arma_blanca,arma,cell_phone") == {
+    assert _classes("persona,arma_blanca,arma,undefined,cell_phone") == {
         "persona",
         "arma_blanca",
         "arma",
+        "undefined",
         "cell_phone",
     }
 
@@ -264,6 +265,44 @@ def test_detector_uses_low_inference_confidence_but_keeps_final_filter(monkeypat
 
     assert detector.detect(np.zeros((10, 10, 3), dtype=np.uint8)) == []
     assert calls == [0.2]
+
+
+def test_detector_can_return_filtered_detections_for_debug_overlay(monkeypatch) -> None:
+    from agente_percepcion import detector as detector_module
+    from agente_percepcion.detector import YoloDetector
+
+    class FakeBox:
+        cls = [0]
+        conf = [0.28]
+        xyxy = [[10, 20, 30, 40]]
+
+    class FakeModel:
+        names = {0: "arma"}
+
+        def predict(self, frame, conf, verbose):
+            return [type("Result", (), {"names": self.names, "boxes": [FakeBox()]})()]
+
+    monkeypatch.setattr(detector_module, "_configure_ultralytics_runtime", lambda: None)
+    monkeypatch.setitem(
+        sys.modules,
+        "ultralytics",
+        types.SimpleNamespace(YOLO=lambda model_path: FakeModel()),
+    )
+
+    detector = YoloDetector(
+        "yolov8n.pt",
+        confidence=0.25,
+        dangerous_confidence=0.35,
+        allowed_classes={"arma"},
+        use_model_tracking=False,
+        show_filtered_detections=True,
+    )
+
+    detections = detector.detect(np.zeros((10, 10, 3), dtype=np.uint8))
+
+    assert len(detections) == 1
+    assert detections[0].label == "arma"
+    assert detections[0].filtered_reason == "conf<0.35"
 
 
 def test_n8n_without_webhook_does_not_send() -> None:
@@ -551,6 +590,7 @@ def test_event_gate_allows_same_label_in_different_frame_regions() -> None:
 def test_only_high_risk_detections_are_alertable() -> None:
     assert _is_alertable_detection("arma")
     assert _is_alertable_detection("knife")
+    assert _is_alertable_detection("persona_sospechosa")
     assert not _is_alertable_detection("persona")
     assert not _is_alertable_detection("no_violencia")
 

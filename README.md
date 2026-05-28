@@ -140,11 +140,16 @@ SENTINEL_CAMERA_DROP_STALE_FRAMES=2
 SENTINEL_CONFIDENCE=0.25
 SENTINEL_DANGEROUS_CONFIDENCE=0.35
 SENTINEL_INFERENCE_CONFIDENCE=0.20
+SENTINEL_DEBUG_DETECTIONS=true
+SENTINEL_DEBUG_CONFIDENCE=0.05
+SENTINEL_SHOW_FILTERED_DETECTIONS=true
 ```
 
 `SENTINEL_INFERENCE_CONFIDENCE` es el umbral que se pasa a YOLO/Ultralytics.
 `SENTINEL_CONFIDENCE` y `SENTINEL_DANGEROUS_CONFIDENCE` son el filtro final de
 SentinelAI. Esta separacion evita descartar armas borrosas antes de analizarlas.
+Con `SENTINEL_SHOW_FILTERED_DETECTIONS=true`, las detecciones que YOLO ve pero
+SentinelAI filtra se dibujan en gris con el motivo, sin enviarse a Telegram/n8n.
 
 ## Ejecutar API local
 
@@ -178,7 +183,7 @@ La variable `SENTINEL_CLASSES` controla que clases generan eventos. Con el model
 
 ```env
 SENTINEL_MODEL=yolo_percepcion/entrenamiento_seguridad/weights/best.pt
-SENTINEL_CLASSES=arma,arma_blanca,fusil,multitud,no_violencia,persona,persona_sospechosa,violencia
+SENTINEL_CLASSES=arma,arma_blanca,fusil,multitud,no_violencia,persona,persona_sospechosa,undefined,violencia
 SENTINEL_CONFIDENCE=0.25
 SENTINEL_DANGEROUS_CONFIDENCE=0.35
 SENTINEL_INFERENCE_CONFIDENCE=0.20

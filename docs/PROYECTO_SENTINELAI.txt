@@ -449,6 +449,7 @@ Clases que normalmente se habilitan en .env:
 - no_violencia
 - persona
 - persona_sospechosa
+- undefined
 - violencia
 
 Nota:
